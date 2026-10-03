@@ -35,10 +35,10 @@ export const CHARACTERS = {
     blurb: 'Wrench spins around you. Hold {special} to build a tower. On top: nail gun hits enemies 5–20 m away, {crouch}+{jump} collapses it.',
   },
   doctor: {
-    name: 'Doctor', role: 'Healer', hearts: 4, speed: 6.0,
+    name: 'Doctor', role: 'Healer', hearts: 4, speed: 7.2,
     height: 1.7, radius: 0.4, eye: 1.5,
     primary: 'axe', backup: 'kick', special: 'bottle',
-    hops: true, doubleJump: true, hopSpeed: 4.2,
+    hops: true, doubleJump: true, hopSpeed: 4.6,
     bottleHeal: 2, bottleRadius: 2.5, bottleCooldown: 15, bottleSpeed: 13,
     blurb: 'Hops on a bird leg, double jump. Axe heals teammates. {special} throws a healing bottle.',
   },

@@ -16,14 +16,14 @@ const PLAY_PHASES = ['countdown', 'play', 'roundEnd'];
 const STEP = 1 / GAME.tickRate;
 
 // ---------- Settings ----------
-const settings = { name: '', teamSize: GAME.teamSize, difficulty: 'normal', sens: 1, volume: 0.6, addr: '', keys: null };
+const settings = { name: '', teamSize: GAME.teamSize, difficulty: 'normal', sens: 1, volume: 0.6, addr: '', keys: null, quality: 'medium' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('fp-settings') || '{}')); } catch { /* ignore */ }
 function saveSettings() { try { localStorage.setItem('fp-settings', JSON.stringify(settings)); } catch { /* ignore */ } }
 const playerName = () => (settings.name || '').trim() || 'Player';
 
 // ---------- Core objects ----------
 const canvas = $('game');
-const renderer = new Renderer(canvas);
+const renderer = new Renderer(canvas, settings.quality);
 renderer.buildMap(buildMap());
 const input = new Input(canvas, settings.keys);
 const audio = new Audio();
@@ -77,6 +77,15 @@ function initMenu() {
   ts.onchange = () => { settings.teamSize = +ts.value; saveSettings(); };
   $('difficulty').onchange = () => { settings.difficulty = $('difficulty').value; saveSettings(); };
   for (const id of ['sens', 'sens2']) $(id).oninput = () => { settings.sens = +$(id).value; $('sens').value = $('sens2').value = settings.sens; saveSettings(); };
+  $('quality').value = $('quality2').value = renderer.quality;
+  for (const id of ['quality', 'quality2']) {
+    $(id).onchange = () => {
+      settings.quality = $(id).value;
+      $('quality').value = $('quality2').value = settings.quality;
+      renderer.setQuality(settings.quality);
+      saveSettings();
+    };
+  }
   for (const id of ['volume', 'volume2']) $(id).oninput = () => { settings.volume = +$(id).value; $('volume').value = $('volume2').value = settings.volume; audio.setVolume(settings.volume); saveSettings(); };
 
   $('btn-offline').onclick = startOffline;

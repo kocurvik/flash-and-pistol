@@ -31,7 +31,7 @@ Each character has one primary weapon, one backup weapon and one special. All nu
 | --- | --- | --- | --- | --- | --- | --- |
 | Longman | Tank | 6 | 4.0 | Machete | Dagger | Medkit, flashlight |
 | Builder | Area control | 4 | 5.5 | Wrench | Fists *(assumption)* | Collapsing tower |
-| Doctor | Healer | 4 | 6.0 (hops) | Axe | Bird-leg kick *(assumption)* | Healing bottle |
+| Doctor | Healer | 4 | 7.2 (hops) | Axe | Bird-leg kick *(assumption)* | Healing bottle |
 | Spy | Thief / assassin | 3 | 6.5 | Knife *(assumption)* | none | Invisibility, steal weapon |
 
 ### Longman

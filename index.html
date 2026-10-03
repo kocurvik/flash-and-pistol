@@ -237,6 +237,8 @@
         <input type="range" id="sens" min="0.4" max="3" step="0.05">
         <label for="volume">Volume</label>
         <input type="range" id="volume" min="0" max="1" step="0.05">
+        <label for="quality">Graphics</label>
+        <select id="quality"><option value="low">Low (fastest)</option><option value="medium">Medium</option><option value="high">High (ambient occlusion)</option></select>
       </div>
       <div class="row"><div class="section-title">Controls</div><button id="btn-controls" style="flex:0;white-space:nowrap">Change controls</button></div>
       <div class="controls" id="controls-list"></div>
@@ -285,6 +287,7 @@
     <button class="big yellow" id="btn-resume">Resume</button>
     <label>Mouse sensitivity <input type="range" id="sens2" min="0.4" max="3" step="0.05"></label>
     <label>Volume <input type="range" id="volume2" min="0" max="1" step="0.05"></label>
+    <label>Graphics <select id="quality2"><option value="low">Low (fastest)</option><option value="medium">Medium</option><option value="high">High (ambient occlusion)</option></select></label>
     <button id="btn-to-lobby" class="hidden">Back to lobby (everyone)</button>
     <button id="btn-controls2">Controls</button>
     <button id="btn-leave">Leave game</button>
@@ -314,6 +317,9 @@
   </div>
 </div>
 
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
+</script>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>

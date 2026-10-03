@@ -9,7 +9,11 @@ A tiny 3D first-person team brawler for the browser: Yellow vs Teal, four charac
 This needs [Node.js](https://nodejs.org) (LTS), with no `npm install`. It starts a small local
 server and opens the game in your browser. Click **Play vs Bots** and you're in.
 
-Three.js is bundled in `vendor/`, so the game works without an internet connection.
+Three.js and the add-ons it uses (`vendor/addons`, fetched by `node tools/vendor-three-addons.mjs`)
+are bundled, so the game works without an internet connection.
+
+**Graphics** (Settings, or the pause menu): *Low* renders directly and is the fastest; *Medium*
+(default) adds bloom and smooth edges; *High* adds ambient occlusion and sharper shadows.
 
 ## Play with friends on the same network (LAN)
 
@@ -67,7 +71,8 @@ No build step: plain ES modules, served as-is.
 | `src/physics.js` | Movement, collisions, climbing, ground-pound, raycasts, waypoint graph + A* |
 | `src/sim.js` | Authoritative game rules: rounds, picks, combat, steal, towers, bottles, flashlight |
 | `src/bots.js` | Bot brains: the spec's priority rules + per-character rules |
-| `src/render.js` | Three.js scene, characters, first-person view, effects |
+| `src/models.js` | Meshes: weapons, characters, towers, arena details, sky and scenery |
+| `src/render.js` | Three.js scene, lighting, graphics quality and post-processing, animation, effects |
 | `src/hud.js`, `src/input.js`, `src/audio.js` | HUD, keyboard/mouse, synthesized sounds |
 | `src/net.js` | Relay connection, host session, client view with interpolation |
 | `src/main.js` | Menus, game modes, main loop |

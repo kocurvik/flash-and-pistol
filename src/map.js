@@ -68,6 +68,13 @@ export function buildMap() {
   addMirrorXZ(centered(-18, 8, 2, 1.2, 1.2, C.crate));
   addMirrorXZ(centered(-8, 9.5, 1.2, 1.2, 1.2, C.crate));
 
+  // Tag each box with a kind so the renderer can detail walls, crates, pillars...
+  const KIND = {
+    [C.wall]: 'wall', [C.wallDark]: 'wall', [C.crate]: 'crate', [C.crateDark]: 'crate',
+    [C.pillar]: 'pillar', [C.walkway]: 'walkway', [C.step]: 'step', [C.stone]: 'wall',
+  };
+  for (const b of boxes) b.kind = KIND[b.color] || 'wall';
+
   const spawns = { yellow: [], teal: [] };
   for (let i = 0; i < 6; i++) {
     const z = -3 + i * 1.2; // inside the gap of the base wall
