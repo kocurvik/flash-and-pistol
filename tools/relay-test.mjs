@@ -1,0 +1,26 @@
+// Smoke test for the relay server: node tools/relay-test.mjs [port]
+const port = process.argv[2] || 8080;
+const url = `ws://localhost:${port}/ws`;
+const open = (u) => new Promise((res, rej) => { const w = new WebSocket(u); const q = []; w.q = q; w.onmessage = (e) => q.push(JSON.parse(e.data)); w.onopen = () => res(w); w.onerror = rej; });
+const next = async (w, t) => { for (let i = 0; i < 100; i++) { const k = w.q.findIndex((m) => m.t === t); if (k >= 0) return w.q.splice(k, 1)[0]; await new Promise((r) => setTimeout(r, 20)); } throw new Error('no ' + t); };
+const h = await open(url), c = await open(url);
+h.send(JSON.stringify({ t: 'host', name: 'Hosty' }));
+const hosted = await next(h, 'hosted');
+c.send(JSON.stringify({ t: 'list' }));
+const rooms = await next(c, 'rooms');
+console.log('rooms seen by client:', JSON.stringify(rooms.rooms));
+c.send(JSON.stringify({ t: 'join', room: hosted.room.id, name: 'Clienty' }));
+const joined = await next(c, 'joined');
+const pj = await next(h, 'peer-join');
+console.log('joined as', joined.you, 'host saw', pj.name);
+h.send(JSON.stringify({ t: 'bcast', data: { t: 'snap', big: 'x'.repeat(70000) } }));
+const snap = await next(c, 'msg');
+console.log('broadcast received, payload length', snap.data.big.length);
+c.send(JSON.stringify({ t: 'up', data: { t: 'in', x: 1 } }));
+const up = await next(h, 'msg');
+console.log('uplink received from', up.from, JSON.stringify(up.data));
+h.close();
+const closed = await next(c, 'closed');
+console.log('client notified:', closed.reason);
+c.close();
+console.log('RELAY OK');

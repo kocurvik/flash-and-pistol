@@ -1,0 +1,11 @@
+{
+  "name": "flash-and-pistol",
+  "private": true,
+  "type": "module",
+  "description": "Flash and Pištol: a tiny first-person team brawler in the browser",
+  "scripts": {
+    "start": "node server.js --open",
+    "serve": "node server.js",
+    "test": "node tools/headless-test.mjs 3 4 normal"
+  }
+}
