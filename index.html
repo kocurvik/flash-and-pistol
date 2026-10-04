@@ -124,6 +124,10 @@
   #alive .pips { display: flex; gap: 3px; }
   #alive .pip { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,.4); }
   #round-label { font-size: 15px; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.5); }
+  #flags { display: flex; gap: 8px; font-family: system-ui, sans-serif; font-weight: 700; font-size: 13px; }
+  #flags .flag { background: var(--panel); border-radius: 8px; padding: 3px 9px; }
+  #flags .flag.carried { outline: 2px solid #ff6b6b; }
+  #flags .flag.dropped { outline: 2px dashed #ffd43b; }
   #killfeed { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-family: system-ui, sans-serif; font-weight: 700; font-size: 14px; }
   #killfeed .k { background: var(--panel); padding: 5px 10px; border-radius: 8px; animation: kin .2s ease-out; }
   #killfeed .k.mine { outline: 2px solid #fff; }
@@ -184,6 +188,7 @@
     <div id="scorebar"><div class="s y" id="score-y">0</div><div id="timer">3:00</div><div class="s t" id="score-t">0</div></div>
     <div id="alive"></div>
     <div id="round-label"></div>
+    <div id="flags" class="hidden"></div>
   </div>
   <div id="killfeed"></div>
   <div id="crosshair"><div id="hitmarker"></div></div>
@@ -203,7 +208,7 @@
     <div class="card stack">
       <div>
         <div class="title"><span class="f">Flash</span> and <span class="p">Pištol</span></div>
-        <div class="subtitle">A tiny first-person team brawler. Yellow vs Teal. Last team standing wins the round.</div>
+        <div class="subtitle">A tiny first-person team brawler. Yellow vs Teal. Be the last team standing, or steal the enemy treasure in the Crystal Cave.</div>
       </div>
       <label>Your name <input id="name" maxlength="16" placeholder="Player"></label>
       <button class="big yellow" id="btn-offline">▶ Play vs Bots</button>
@@ -229,6 +234,8 @@
     <div class="card stack">
       <div class="section-title">Settings</div>
       <div class="settings">
+        <label for="map">Map</label>
+        <select id="map"></select>
         <label for="teamsize">Team size</label>
         <select id="teamsize"></select>
         <label for="difficulty">Bot difficulty</label>
@@ -238,7 +245,7 @@
         <label for="volume">Volume</label>
         <input type="range" id="volume" min="0" max="1" step="0.05">
         <label for="quality">Graphics</label>
-        <select id="quality"><option value="low">Low (fastest)</option><option value="medium">Medium</option><option value="high">High (ambient occlusion)</option></select>
+        <select id="quality"><option value="low">Low (fastest)</option><option value="medium">Medium</option><option value="high">High (glow effects)</option><option value="ultra">Ultra (glow + ambient occlusion)</option></select>
       </div>
       <div class="row"><div class="section-title">Controls</div><button id="btn-controls" style="flex:0;white-space:nowrap">Change controls</button></div>
       <div class="controls" id="controls-list"></div>
@@ -259,7 +266,9 @@
       <div class="team-col yellow"><h3 class="ty">Yellow</h3><div id="lobby-yellow"></div><button class="yellow" id="join-yellow">Join Yellow</button></div>
       <div class="team-col teal"><h3 class="tt">Teal</h3><div id="lobby-teal"></div><button class="teal" id="join-teal">Join Teal</button></div>
     </div>
+    <div class="muted" id="lobby-mapinfo"></div>
     <div id="host-controls" class="row">
+      <label>Map <select id="lobby-map"></select></label>
       <label>Team size <select id="lobby-teamsize"></select></label>
       <label>Bots <select id="lobby-difficulty"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></label>
       <button class="big yellow" id="btn-start">Start match</button>
@@ -287,7 +296,7 @@
     <button class="big yellow" id="btn-resume">Resume</button>
     <label>Mouse sensitivity <input type="range" id="sens2" min="0.4" max="3" step="0.05"></label>
     <label>Volume <input type="range" id="volume2" min="0" max="1" step="0.05"></label>
-    <label>Graphics <select id="quality2"><option value="low">Low (fastest)</option><option value="medium">Medium</option><option value="high">High (ambient occlusion)</option></select></label>
+    <label>Graphics <select id="quality2"><option value="low">Low (fastest)</option><option value="medium">Medium</option><option value="high">High (glow effects)</option><option value="ultra">Ultra (glow + ambient occlusion)</option></select></label>
     <button id="btn-to-lobby" class="hidden">Back to lobby (everyone)</button>
     <button id="btn-controls2">Controls</button>
     <button id="btn-leave">Leave game</button>

@@ -120,7 +120,15 @@ export class HUD {
     }
 
     // Spectating label
-    this.set('spectate', ctx.spectating ? `Spectating ${this.name(ctx.spectating)} · click to switch` : (me && !me.alive && view.phase === 'play' ? 'You are out until the next round' : ''));
+    let spec = ctx.spectating ? `Spectating ${this.name(ctx.spectating)} · click to switch` : (me && !me.alive && view.phase === 'play' ? 'You are out until the next round' : '');
+    if (view.mode === 'ctf' && me && !me.alive && view.phase === 'play') {
+      spec = me.pick ? `Back in ${Math.max(1, Math.ceil(me.respawnT || 0))} s as ${CHAR_ICONS[me.pick]} ${CHARACTERS[me.pick].name} · 1–4 to switch` : '';
+    }
+    this.set('spectate', spec);
+
+    // Treasure status (capture the treasure)
+    $('flags').classList.toggle('hidden', view.mode !== 'ctf' || !view.flags || !view.flags.length);
+    if (view.mode === 'ctf' && view.flags) this.set('flags', view.flags.map((f) => this.flagHtml(view, f)).join(''));
 
     // Hints
     if (this.hintT > 0) {
@@ -136,6 +144,15 @@ export class HUD {
     const sb = $('scoreboard');
     sb.classList.toggle('hidden', !ctx.showScores);
     if (ctx.showScores) this.set('scoreboard', this.scoreboardHtml(view, me));
+  }
+
+  flagHtml(view, f) {
+    let state = 'safe at home';
+    if (f.state === 'carried') {
+      const c = view.entities.find((e) => e.id === f.carrier);
+      state = `taken by ${c ? this.name(c) : '?'}`;
+    } else if (f.state === 'dropped') state = `dropped · home in ${Math.max(0, Math.ceil(f.dropT))} s`;
+    return `<div class="flag ${f.state}"><span class="${tcls(f.team)}">💎 ${TEAM_NAMES[f.team]}</span> ${state}</div>`;
   }
 
   loadoutHtml(me, def) {
@@ -171,14 +188,16 @@ export class HUD {
   }
 
   scoreboardHtml(view, me) {
+    const ctf = view.mode === 'ctf';
     const col = (team) => {
       const rows = view.entities.filter((e) => e.team === team)
         .sort((a, b) => b.kills - a.kills)
         .map((e) => {
           const ch = e.char && e.alive !== undefined ? `${CHAR_ICONS[e.char] || ''} ${CHARACTERS[e.char] ? CHARACTERS[e.char].name : ''}` : '';
-          return `<tr class="${e.alive ? '' : 'dead'} ${me && e.id === me.id ? 'me' : ''}"><td>${esc(e.name)}</td><td>${ch}</td><td>${e.kills}</td><td>${e.deaths}</td><td>${e.heals || 0}</td></tr>`;
+          const caps = ctf ? `<td>${e.captures || 0}</td>` : '';
+          return `<tr class="${e.alive ? '' : 'dead'} ${me && e.id === me.id ? 'me' : ''}"><td>${esc(e.name)}</td><td>${ch}</td>${caps}<td>${e.kills}</td><td>${e.deaths}</td><td>${e.heals || 0}</td></tr>`;
         }).join('');
-      return `<table><tr><th class="${tcls(team)}" colspan="2">${TEAM_NAMES[team]} · ${view.score[team]}</th><th>K</th><th>D</th><th>Heal</th></tr>${rows}</table>`;
+      return `<table><tr><th class="${tcls(team)}" colspan="2">${TEAM_NAMES[team]} · ${view.score[team]}</th>${ctf ? '<th>💎</th>' : ''}<th>K</th><th>D</th><th>Heal</th></tr>${rows}</table>`;
     };
     return `<div class="cols">${col('yellow')}${col('teal')}</div>`;
   }

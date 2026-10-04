@@ -7,7 +7,7 @@ import { Audio } from './audio.js';
 import { HUD, CHAR_ICONS } from './hud.js';
 import { Relay, HostSession, ClientView, relayUrlFromAddress } from './net.js';
 import { stepMovement, raycast, forwardVec, yawTo } from './physics.js';
-import { buildMap } from './map.js';
+import { buildMap, MAPS, MAP_ORDER } from './map.js';
 import { CHARACTERS, CHARACTER_ORDER, WEAPONS, GAME, TEAM_NAMES, TEAM_COLORS } from './config.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,15 +16,16 @@ const PLAY_PHASES = ['countdown', 'play', 'roundEnd'];
 const STEP = 1 / GAME.tickRate;
 
 // ---------- Settings ----------
-const settings = { name: '', teamSize: GAME.teamSize, difficulty: 'normal', sens: 1, volume: 0.6, addr: '', keys: null, quality: 'medium' };
+const settings = { name: '', teamSize: GAME.teamSize, difficulty: 'normal', sens: 1, volume: 0.6, addr: '', keys: null, quality: 'medium', map: 'arena' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('fp-settings') || '{}')); } catch { /* ignore */ }
+if (!MAPS[settings.map]) settings.map = 'arena';
 function saveSettings() { try { localStorage.setItem('fp-settings', JSON.stringify(settings)); } catch { /* ignore */ } }
 const playerName = () => (settings.name || '').trim() || 'Player';
 
 // ---------- Core objects ----------
 const canvas = $('game');
 const renderer = new Renderer(canvas, settings.quality);
-renderer.buildMap(buildMap());
+renderer.buildMap(buildMap(settings.map));
 const input = new Input(canvas, settings.keys);
 const audio = new Audio();
 audio.setVolume(settings.volume);
@@ -74,6 +75,21 @@ function initMenu() {
 
   $('name').oninput = () => { settings.name = $('name').value; saveSettings(); };
   ts.onchange = () => { settings.teamSize = +ts.value; saveSettings(); };
+  for (const id of ['map', 'lobby-map']) {
+    for (const m of MAP_ORDER) $(id).add(new Option(`${MAPS[m].name} · ${MAPS[m].modeName}`, m));
+  }
+  $('map').value = settings.map;
+  $('map').onchange = () => {
+    settings.map = $('map').value;
+    saveSettings();
+    renderer.buildMap(buildMap(settings.map)); // the menu backdrop previews it
+  };
+  $('lobby-map').onchange = () => {
+    if (G.mode !== 'host' || G.sim.phase !== 'lobby') return;
+    G.sim.setMap($('lobby-map').value);
+    settings.map = G.sim.mapId;
+    saveSettings();
+  };
   $('difficulty').onchange = () => { settings.difficulty = $('difficulty').value; saveSettings(); };
   for (const id of ['sens', 'sens2']) $(id).oninput = () => { settings.sens = +$(id).value; $('sens').value = $('sens2').value = settings.sens; saveSettings(); };
   $('quality').value = $('quality2').value = renderer.quality;
@@ -106,7 +122,7 @@ function initMenu() {
   });
 
   document.addEventListener('pointerlockchange', () => {
-    if (!input.locked && G.mode && PLAY_PHASES.includes(G.view.phase)) G.pauseOpen = true;
+    if (!input.locked && G.mode && PLAY_PHASES.includes(G.view.phase) && !latePicking()) G.pauseOpen = true;
     if (input.locked) G.pauseOpen = false;
   });
   $('btn-controls').onclick = () => openControls();
@@ -196,7 +212,7 @@ function setupGame(mode, view, localId) {
 
 function startOffline() {
   audio.init();
-  const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty });
+  const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty, mapId: settings.map });
   sim.addHuman('me', playerName(), 'yellow');
   sim.fillBots();
   sim.newMatch();
@@ -210,7 +226,7 @@ async function hostGame() {
   relay.send({ t: 'host', name: playerName() });
   let m;
   try { m = await relay.wait('hosted'); } catch { alert('The server did not respond.'); return; }
-  const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty });
+  const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty, mapId: settings.map });
   sim.addHuman(m.you, playerName(), 'yellow');
   sim.fillBots();
   G.host = new HostSession(relay, sim);
@@ -270,6 +286,7 @@ function backToMenu(message) {
   for (const id of ['lobby', 'pick', 'pause', 'matchend', 'clickplay']) $(id).classList.add('hidden');
   hud.show(false);
   $('menu').classList.remove('hidden');
+  renderer.buildMap(buildMap(settings.map));
   if (message) setTimeout(() => alert(message), 50);
 }
 
@@ -376,19 +393,28 @@ function canPick(view, me, c) {
   return n < GAME.maxSameCharacter;
 }
 
+// Capture the treasure: the dead may switch character before they respawn
+const respawning = (view, me) => view.mode === 'ctf' && me && !me.alive && (view.phase === 'countdown' || view.phase === 'play');
+// A player who joins a capture-the-treasure round midway picks before spawning
+function latePicking() {
+  const me = getMe();
+  return !!G.view && !!me && respawning(G.view, me) && !me.pick;
+}
+
 function choosePick(c) {
   audio.init();
   const view = G.view, me = getMe();
-  if (!view || view.phase !== 'pick' || !me || !canPick(view, me, c)) { audio.play('fail'); return; }
+  if (!view || !me || (view.phase !== 'pick' && !respawning(view, me)) || !canPick(view, me, c)) { audio.play('fail'); return; }
   if (G.mode === 'client') { G.relay.send({ t: 'up', data: { t: 'pick', char: c } }); me.pick = c; }
   else G.sim.setPick(G.localId, c);
   audio.play('pick');
+  if (view.phase !== 'pick') hud.flashHint(`You will respawn as ${CHARACTERS[c].name}`, 1.5);
   input.lock();
 }
 
 function renderPick(view, me) {
   $('pick-score').innerHTML = `<span class="ty">Yellow ${view.score.yellow}</span> – <span class="tt">${view.score.teal} Teal</span>`;
-  $('pick-title').textContent = `Round ${view.round + 1}: pick your character`;
+  $('pick-title').textContent = view.phase === 'pick' ? `Round ${view.round + 1}: pick your character` : 'Pick a character to join the fight';
   $('pick-timer').textContent = Math.max(0, Math.ceil(view.phaseT));
   const portraitBg = me.team === 'yellow' ? 'rgba(242,196,24,.25)' : 'rgba(31,181,173,.25)';
   for (const c of CHARACTER_ORDER) {
@@ -412,6 +438,8 @@ function renderPick(view, me) {
 function renderLobby(view, me) {
   $('lobby-title').textContent = G.roomName || 'Lobby';
   $('share-url').textContent = G.lanUrl || location.origin;
+  const mp = MAPS[view.mapId] || MAPS.arena;
+  $('lobby-mapinfo').textContent = `Map: ${mp.name} · ${mp.modeName}`;
   for (const team of ['yellow', 'teal']) {
     const html = view.entities.filter((e) => e.team === team).map((e) =>
       `<div class="member${e.id === G.localId ? ' me' : ''}"><span>${esc(e.name)}${e.id === G.localId ? ' (you)' : ''}</span>${e.isBot ? '<span class="bot">bot</span>' : ''}</div>`).join('');
@@ -425,6 +453,7 @@ function renderLobby(view, me) {
   if (isHost) {
     if (document.activeElement !== $('lobby-teamsize')) $('lobby-teamsize').value = view.teamSize;
     if (document.activeElement !== $('lobby-difficulty')) $('lobby-difficulty').value = view.difficulty;
+    if (document.activeElement !== $('lobby-map')) $('lobby-map').value = view.mapId;
   }
 }
 
@@ -466,7 +495,9 @@ function handleEvents(evs) {
         if (killer && killer !== victim) hud.feed(`${hud.name(killer)} <span class="muted">[${esc(how)}]</span> ${hud.name(victim)}`, ev.killer === myId || ev.victim === myId);
         else hud.feed(`${hud.name(victim)} <span class="muted">was crushed by their own tower</span>`, ev.victim === myId);
         if (ev.victim === myId) {
-          hud.message('You are out!', killer && killer !== victim ? `Taken out by ${hud.name(killer)}. You can pick again next round.` : 'You can pick again next round.', 3);
+          const by = killer && killer !== victim ? `Taken out by ${hud.name(killer)}. ` : '';
+          if (view.mode === 'ctf') hud.message('You are out!', `${by}Back in ${GAME.respawnTime} s · press 1–4 to switch character.`, 3);
+          else hud.message('You are out!', `${by}You can pick again next round.`, 3);
           G.specIdx = 0;
         } else if (ev.killer === myId) {
           hud.flashHint(`You took out ${victim ? victim.name : 'someone'}!`, 1.5);
@@ -554,12 +585,46 @@ function handleEvents(evs) {
       case 'fail':
         if (ev.id === myId) { hud.flashHint(ev.reason, 1.5); audio.play('fail'); }
         break;
+      case 'flagTake': {
+        const carrier = e;
+        const tc = ev.team === 'yellow' ? 'ty' : 'tt';
+        audio.play('steal', ev.id === myId ? null : ev, 1.2);
+        renderer.burst(ev.x, ev.y, ev.z, TEAM_COLORS[ev.team], 14, 3, 0.08);
+        hud.feed(`${hud.name(carrier)} <span class="muted">took the</span> <span class="${tc}">${TEAM_NAMES[ev.team]}</span> <span class="muted">treasure!</span>`, ev.id === myId);
+        if (ev.id === myId) hud.message('You have the treasure!', 'Bring it to the ring around your own chest!', 2.5);
+        else if (me && me.team === ev.team) hud.message('Our treasure was taken!', `Stop ${hud.name(carrier)} before they get home!`, 2.5);
+        break;
+      }
+      case 'flagDrop': {
+        const tc = ev.team === 'yellow' ? 'ty' : 'tt';
+        audio.play('break', ev, 0.6);
+        hud.feed(`<span class="${tc}">${TEAM_NAMES[ev.team]}</span> <span class="muted">treasure dropped · back home in ${GAME.flagReturnTime} s</span>`);
+        break;
+      }
+      case 'flagReturn': {
+        const tc = ev.team === 'yellow' ? 'ty' : 'tt';
+        audio.play('heal', ev, 0.8);
+        renderer.ring(ev.x, ev.y, ev.z, TEAM_COLORS[ev.team], 2, 0.6);
+        if (e) hud.feed(`${hud.name(e)} <span class="muted">returned the</span> <span class="${tc}">${TEAM_NAMES[ev.team]}</span> <span class="muted">treasure</span>`, ev.id === myId);
+        else hud.feed(`<span class="${tc}">${TEAM_NAMES[ev.team]}</span> <span class="muted">treasure is back home</span>`);
+        break;
+      }
+      case 'flagCapture':
+        renderer.burst(ev.x, ev.y + 0.8, ev.z, TEAM_COLORS[ev.flag], 30, 5, 0.1, 1.2);
+        hud.feed(`${hud.name(e)} <span class="muted">brought the treasure home!</span>`, ev.id === myId);
+        break;
+      case 'respawn':
+        if (ev.id === myId) hud.flashHint('Back in the fight!', 1.2);
+        break;
       case 'fight': audio.play('fight'); hud.message('FIGHT!', '', 1.2); break;
-      case 'timeUp': hud.message('Time up!', 'The team with more hearts left wins the round.', 2.5); break;
+      case 'timeUp':
+        if (ev.ctf) hud.message('Time up!', 'Nobody brought a treasure home.', 2.5);
+        else hud.message('Time up!', 'The team with more hearts left wins the round.', 2.5);
+        break;
       case 'roundEnd': {
         const w = ev.winner;
         if (w === 'draw') hud.message('Draw!', 'Nobody scores this round.', 4);
-        else hud.message(`${TEAM_NAMES[w]} wins the round!`, `<span class="ty">${ev.score.yellow}</span> – <span class="tt">${ev.score.teal}</span>`, 4);
+        else hud.message(view.mode === 'ctf' ? `${TEAM_NAMES[w]} steals the treasure!` : `${TEAM_NAMES[w]} wins the round!`, `<span class="ty">${ev.score.yellow}</span> – <span class="tt">${ev.score.teal}</span>`, 4);
         if (me && w !== 'draw') audio.play(me.team === w ? 'win' : 'lose');
         break;
       }
@@ -585,6 +650,9 @@ function withKeys(text) {
 function computeHint(view, me) {
   if (!me || !me.alive || !PLAY_PHASES.includes(view.phase)) return '';
   const def = CHARACTERS[me.char];
+  if (view.mode === 'ctf' && view.flags && view.flags.some((f) => f.carrier === me.id)) {
+    return '<b>You have the treasure!</b> Bring it to the ring around your own chest';
+  }
   switch (me.char) {
     case 'builder': {
       const tower = view.towers.find((t) => t.id === me.towerId);
@@ -632,7 +700,8 @@ function computeCamera(view, me) {
   const phase = view ? view.phase : 'lobby';
   if (!view || !me || !PLAY_PHASES.includes(phase)) {
     const t = G.time * 0.06;
-    const x = Math.cos(t) * 34, z = Math.sin(t) * 24, y = 16;
+    const B = renderer.mapBounds;
+    const x = Math.cos(t) * (B.maxX + 4), z = Math.sin(t) * (B.maxZ + 4), y = 16;
     return { cam: { x, y, z, yaw: yawTo(-x, -z), pitch: Math.atan2(-y + 1, Math.hypot(x, z)) }, firstPerson: false, spectating: null };
   }
   if (me.alive) {
@@ -693,7 +762,7 @@ function fixedStep() {
     me.yaw = G.yaw;
     me.pitch = G.pitch;
     const mvInp = view.phase === 'countdown' ? { ...emptyInput(), crouch: inp.crouch } : inp;
-    const mv = stepMovement(me, def, mvInp, STEP, view.solids, me.towerId);
+    const mv = stepMovement(me, def, mvInp, STEP, view.solids, me.towerId, view.map.bounds);
     if (mv.poundLanded) n.pdc++;
     if (mv.landed > 9) audio.play('land', null, 0.6);
   }
@@ -738,7 +807,7 @@ function frame(now) {
   G.showScores = input.action('scores');
   // Number keys pick a character during the pick phase
   if (input.pickRequest) {
-    if (phase === 'pick') choosePick(CHARACTER_ORDER[input.pickRequest - 1]);
+    if (phase === 'pick' || (view && respawning(view, me))) choosePick(CHARACTER_ORDER[input.pickRequest - 1]);
     input.pickRequest = 0;
   }
 
@@ -757,7 +826,8 @@ function frame(now) {
     if (ph === 'pick' || ph === 'matchEnd' || ph === 'lobby') input.unlock();
     if (ph === 'countdown') {
       const m = getMe();
-      hud.message(`Round ${G.view.round}`, m && m.char ? `You are ${CHAR_ICONS[m.char]} ${CHARACTERS[m.char].name}` : '', 2);
+      const goal = G.view.mode === 'ctf' ? ' · grab their treasure and bring it home!' : '';
+      hud.message(`Round ${G.view.round}`, m && m.char ? `You are ${CHAR_ICONS[m.char]} ${CHARACTERS[m.char].name}${goal}` : '', 2.5);
       G.lastCount = null;
     }
     G.lastPhase = ph;
@@ -766,6 +836,9 @@ function frame(now) {
     const c = Math.ceil(G.view.phaseT);
     if (c !== G.lastCount && c > 0) { G.lastCount = c; audio.play('beep'); }
   }
+
+  // The host may have switched maps in the lobby
+  if (G.view && G.view.map && G.view.mapId !== renderer.mapId) renderer.buildMap(G.view.map);
 
   // Camera + render
   const meNow = getMe();
@@ -787,10 +860,12 @@ function frame(now) {
   const inPlay = !!G.mode && PLAY_PHASES.includes(ph);
   hud.show(inPlay);
   $('lobby').classList.toggle('hidden', !(G.mode && ph === 'lobby'));
-  $('pick').classList.toggle('hidden', !(G.mode && ph === 'pick' && meNow));
+  const latePick = latePicking();
+  $('pick').classList.toggle('hidden', !(G.mode && ((ph === 'pick' && meNow) || latePick)));
+  if (latePick && input.locked) input.unlock();
   $('matchend').classList.toggle('hidden', !(G.mode && ph === 'matchEnd'));
   $('pause').classList.toggle('hidden', !(inPlay && G.pauseOpen));
-  $('clickplay').classList.toggle('hidden', !(inPlay && !input.locked && !G.pauseOpen));
+  $('clickplay').classList.toggle('hidden', !(inPlay && !input.locked && !G.pauseOpen && !latePick));
   if (inPlay) {
     hud.update(G.view, meNow, {
       spectating: camInfo.spectating,
@@ -806,7 +881,7 @@ function frame(now) {
   if (uiAcc > 0.1 && G.mode) {
     uiAcc = 0;
     if (ph === 'lobby') renderLobby(G.view, meNow);
-    if (ph === 'pick' && meNow) renderPick(G.view, meNow);
+    if ((ph === 'pick' || latePick) && meNow) renderPick(G.view, meNow);
     if (ph === 'matchEnd') {
       const w = G.view.matchWinner;
       $('matchend-title').innerHTML = w ? `<span class="${w === 'yellow' ? 'ty' : 'tt'}">${TEAM_NAMES[w]}</span> wins the match!` : 'Match over';

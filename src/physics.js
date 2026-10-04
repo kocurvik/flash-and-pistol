@@ -40,7 +40,9 @@ export function entityHeight(e, def) {
 // Moves one entity for one tick. Shared by the host simulation and client-side prediction.
 // input: { fwd, right, jump, jumpPressed, crouch }
 // Returns movement events: { poundLanded: box|null, landed: speed|0, jumped: bool }
-export function stepMovement(e, def, input, dt, solids, ownTowerId) {
+const DEFAULT_BOUNDS = { minX: -30, maxX: 30, minZ: -20, maxZ: 20 };
+
+export function stepMovement(e, def, input, dt, solids, ownTowerId, bounds = DEFAULT_BOUNDS) {
   const out = { poundLanded: null, landed: 0, jumped: false };
   const r = def.radius;
   const wasCrouch = e.crouch;
@@ -148,9 +150,9 @@ export function stepMovement(e, def, input, dt, solids, ownTowerId) {
       out.poundLanded = e.standingOn || { ground: true };
     }
   }
-  // Keep inside the arena
-  e.pos.x = Math.max(-29.5, Math.min(29.5, e.pos.x));
-  e.pos.z = Math.max(-19.5, Math.min(19.5, e.pos.z));
+  // Keep inside the map
+  e.pos.x = Math.max(bounds.minX + 0.5, Math.min(bounds.maxX - 0.5, e.pos.x));
+  e.pos.z = Math.max(bounds.minZ + 0.5, Math.min(bounds.maxZ - 0.5, e.pos.z));
   return out;
 }
 
@@ -192,12 +194,12 @@ export function lineClear(a, b, solids) {
 
 // ---------- Waypoint graph ----------
 
-export function buildNav(boxes) {
+export function buildNav(boxes, bounds = DEFAULT_BOUNDS) {
   const nodes = [];
   const R = 0.45;
   const free = (x, y, z) => !firstOverlap(x, y + EPS, z, R, 1.0, boxes);
-  for (let x = -28; x <= 28; x += 2) {
-    for (let z = -18; z <= 18; z += 2) {
+  for (let x = bounds.minX + 2; x <= bounds.maxX - 2; x += 2) {
+    for (let z = bounds.minZ + 2; z <= bounds.maxZ - 2; z += 2) {
       if (free(x, 0, z)) nodes.push({ x, y: 0, z });
     }
   }

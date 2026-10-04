@@ -112,12 +112,12 @@ const INTERP_DELAY = 100; // ms
 export class ClientView {
   constructor(myId) {
     this.myId = myId;
-    this.map = buildMap();
-    this.solids = this.map.boxes.slice();
+    this.setMap('arena');
     this.entities = [];
     this.byId = new Map();
     this.towers = [];
     this.projectiles = [];
+    this.flags = [];
     this.phase = 'lobby';
     this.phaseT = 0;
     this.round = 0;
@@ -132,8 +132,17 @@ export class ClientView {
 
   get(id) { return this.byId.get(id); }
 
+  setMap(id) {
+    this.map = buildMap(id);
+    this.mapId = this.map.id;
+    this.mode = this.map.mode;
+    this.solids = this.map.boxes.slice();
+  }
+
   applySnapshot(s, now) {
     this.gotSnapshot = true;
+    if (s.mapId && s.mapId !== this.mapId) this.setMap(s.mapId);
+    this.flags = s.flags || [];
     this.phase = s.phase; this.phaseT = s.phaseT; this.round = s.round;
     this.score = s.score; this.winner = s.winner; this.matchWinner = s.matchWinner;
     this.teamSize = s.teamSize; this.difficulty = s.difficulty; this.time = s.time;
@@ -149,7 +158,7 @@ export class ClientView {
       const isMe = se.id === this.myId;
       for (const k of ['name', 'team', 'isBot', 'char', 'pick', 'alive', 'hearts', 'maxHearts', 'weapon', 'slot', 'hasPrimary', 'stolen',
         'attackCd', 'specialCd', 'specialMax', 'buildT', 'flashlight', 'flickerT', 'revealed', 'attackSeq', 'kills', 'deaths', 'heals', 'towerId', 'lastHurtT',
-        'cloakT', 'onTower']) {
+        'cloakT', 'onTower', 'respawnT', 'captures']) {
         e[k] = se[k];
       }
       if (isMe) {

@@ -11,14 +11,29 @@ import { CHARACTERS, TEAM_COLORS, WEAPONS, GAME } from './config.js';
 import { lookDir } from './physics.js';
 import {
   buildWeapon, buildCharacter, buildViewArm, buildTower, buildArena, buildClouds,
-  boxGeo, mat,
+  buildCave, buildTreasureChest, buildGems, boxGeo, mat,
 } from './models.js';
 
-// Graphics presets: post-processing, shadow resolution and render resolution
+// Lighting and atmosphere per map theme
+const THEMES = {
+  outdoor: {
+    background: 0xcfe8f7, fog: [0xcfe8f7, 70, 260], hemi: [0xcfe8ff, 0x7a6a4a, 0.9],
+    sun: [0xfff0d8, 3.0], env: 0.45, exposure: 1.05,
+  },
+  cave: {
+    background: 0x07080c, fog: [0x0c0e15, 24, 85], hemi: [0x95a0c8, 0x40352b, 0.95],
+    sun: [0xa9bcff, 1.2], env: 0.2, exposure: 1.15,
+  },
+};
+
+// Graphics presets: render resolution, shadows and post-processing.
+// Post-processing (bloom, ambient occlusion) is the expensive part, so it is
+// only used on High and Ultra.
 export const QUALITY = {
-  low: { label: 'Low', post: false, ao: false, shadow: 1024, maxDpr: 1 },
-  medium: { label: 'Medium', post: true, ao: false, shadow: 2048, maxDpr: 1.5 },
-  high: { label: 'High', post: true, ao: true, shadow: 4096, maxDpr: 2 },
+  low: { label: 'Low', post: false, ao: false, shadow: 1024, softShadows: false, maxDpr: 1 },
+  medium: { label: 'Medium', post: false, ao: false, shadow: 2048, softShadows: false, maxDpr: 1.25 },
+  high: { label: 'High', post: true, ao: false, shadow: 2048, softShadows: true, maxDpr: 1.5 },
+  ultra: { label: 'Ultra', post: true, ao: true, shadow: 4096, softShadows: true, maxDpr: 2 },
 };
 
 // How each weapon is held at rest in first person (rotation about x: + points up)
@@ -115,7 +130,8 @@ export class Renderer {
     this.scene.environmentIntensity = 0.45;
     pmrem.dispose();
 
-    this.scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x7a6a4a, 0.9));
+    this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x7a6a4a, 0.9);
+    this.scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xfff0d8, 3.0);
     sun.position.set(25, 45, 15);
     sun.castShadow = true;
@@ -134,24 +150,31 @@ export class Renderer {
     this.particles = [];
     this.buildPreview = null;
     this.clouds = null;
+    this.mapRoot = null;
+    this.mapId = null;
+    this.mapBounds = { minX: -30, maxX: 30, minZ: -20, maxZ: 20 };
+    this.torches = { lights: [], flames: [] };
+    this.treasures = {};
 
-    // Flashlight pool: fixed count so materials never recompile
+    // Flashlights: one real spotlight (for the most relevant flashlight) plus a
+    // visible beam per flashlight. A fixed light count keeps shaders cheap and
+    // avoids recompiling them when flashlights switch on and off.
     this.spots = [];
     const coneLen = CHARACTERS.longman.flashlightRange;
     const coneR = Math.tan(CHARACTERS.longman.flashlightAngle * Math.PI / 180) * coneLen;
     const coneGeo = new THREE.ConeGeometry(coneR, coneLen, 32, 1, true);
     coneGeo.translate(0, -coneLen / 2, 0);
     coneGeo.rotateX(Math.PI / 2); // apex at origin, opening toward -z (forward)
+    this.flashLight = new THREE.SpotLight(0xfff1c8, 0, coneLen * 1.5, CHARACTERS.longman.flashlightAngle * Math.PI / 180 * 1.15, 0.4, 1.2);
+    this.scene.add(this.flashLight);
+    this.scene.add(this.flashLight.target);
     for (let i = 0; i < 5; i++) {
-      const light = new THREE.SpotLight(0xfff1c8, 0, coneLen * 1.5, CHARACTERS.longman.flashlightAngle * Math.PI / 180 * 1.15, 0.4, 1.2);
-      this.scene.add(light);
-      this.scene.add(light.target);
       const cone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({
         color: 0xfff1c8, transparent: true, opacity: 0.07, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
       }));
       cone.visible = false;
       this.scene.add(cone);
-      this.spots.push({ light, cone });
+      this.spots.push({ cone });
     }
 
     // First-person viewmodel
@@ -183,6 +206,11 @@ export class Renderer {
     if (this.sun.shadow.mapSize.x !== Q.shadow) {
       this.sun.shadow.mapSize.set(Q.shadow, Q.shadow);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+    }
+    const shadowType = Q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (this.gl.shadowMap.type !== shadowType) {
+      this.gl.shadowMap.type = shadowType;
+      this.scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
     }
     if (this.composer) { this.composer.dispose(); this.composer = null; }
     if (Q.post) {
@@ -217,9 +245,63 @@ export class Renderer {
     }
   }
 
+  // Builds (or switches to) a map's static scene: geometry, lighting, treasures
   buildMap(map) {
-    buildArena(this.scene, map);
-    this.clouds = buildClouds(this.scene);
+    if (this.mapId === map.id) return;
+    if (this.mapRoot) this.scene.remove(this.mapRoot);
+    this.mapId = map.id;
+    this.mapBounds = map.bounds;
+    const root = new THREE.Group();
+    this.mapRoot = root;
+    this.scene.add(root);
+    this.applyTheme(map);
+    this.clouds = null;
+    this.torches = { lights: [], flames: [] };
+    if (map.theme === 'cave') this.torches = buildCave(root, map);
+    else {
+      buildArena(root, map);
+      this.clouds = buildClouds(root);
+    }
+    // Treasures: a chest and a capture ring at each home, plus the gems that travel
+    this.treasures = {};
+    for (const [team, h] of Object.entries(map.homes || {})) {
+      const chest = buildTreasureChest(team);
+      chest.position.set(h.x, h.y, h.z);
+      chest.rotation.y = team === 'yellow' ? -Math.PI / 2 : Math.PI / 2;
+      chest.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      root.add(chest);
+      const r = GAME.captureRadius;
+      const rg = new THREE.RingGeometry(r - 0.18, r, 64);
+      rg.rotateX(-Math.PI / 2);
+      const ring = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: TEAM_COLORS[team], transparent: true, opacity: 0.6, depthWrite: false }));
+      ring.position.set(h.x, h.y + 0.03, h.z);
+      root.add(ring);
+      const gems = buildGems(team);
+      root.add(gems);
+      const glow = new THREE.PointLight(team === 'yellow' ? 0xffcf3a : 0x2fe0d0, 3, 5, 1.5);
+      gems.add(glow);
+      glow.position.y = 0.4;
+      this.treasures[team] = { home: h, gems };
+    }
+  }
+
+  applyTheme(map) {
+    const T = THEMES[map.theme] || THEMES.outdoor;
+    this.scene.background = new THREE.Color(T.background);
+    this.scene.fog = new THREE.Fog(...T.fog);
+    this.hemi.color.setHex(T.hemi[0]);
+    this.hemi.groundColor.setHex(T.hemi[1]);
+    this.hemi.intensity = T.hemi[2];
+    this.sun.color.setHex(T.sun[0]);
+    this.sun.intensity = T.sun[1];
+    this.scene.environmentIntensity = T.env;
+    this.gl.toneMappingExposure = T.exposure;
+    // Fit the shadow camera to the map
+    const B = map.bounds;
+    const hx = (B.maxX - B.minX) / 2 + 8, hz = (B.maxZ - B.minZ) / 2 + 8;
+    const sc = this.sun.shadow.camera;
+    sc.left = -hx; sc.right = hx; sc.top = hz; sc.bottom = -hz;
+    sc.updateProjectionMatrix();
   }
 
   // ---------- Per-frame ----------
@@ -233,10 +315,13 @@ export class Renderer {
     this.updateCharacters(view, opts, dt);
     this.updateTowers(view, dt, opts.time);
     this.updateProjectiles(view, dt);
+    this.updateTreasures(view, opts);
     this.updateFlashlights(view, opts);
     this.updateViewmodel(view, opts, dt);
     this.updateParticles(dt);
     if (this.clouds) this.clouds.rotation.y += dt * 0.004;
+    for (const t of this.torches.lights) t.light.intensity = t.base * (0.85 + 0.15 * Math.sin(opts.time * 9 + t.phase) * Math.sin(opts.time * 13.7 + t.phase * 2));
+    for (const f of this.torches.flames) f.scale.y = 0.85 + Math.random() * 0.3;
     if (this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, cam);
   }
@@ -460,28 +545,64 @@ export class Renderer {
     }
   }
 
+  // Gems sit in their chest, float above whoever carries them, or lie where they were dropped
+  updateTreasures(view, opts) {
+    const live = ['countdown', 'play', 'roundEnd'].includes(view.phase);
+    const t = opts.time;
+    for (const [team, T] of Object.entries(this.treasures)) {
+      const f = live && view.flags ? view.flags.find((ff) => ff.team === team) : null;
+      const g = T.gems;
+      g.visible = true;
+      g.scale.setScalar(1);
+      if (!f || f.state === 'home') {
+        g.position.set(T.home.x, T.home.y + 0.42, T.home.z);
+        g.rotation.y = 0;
+      } else if (f.state === 'carried') {
+        const c = view.entities.find((e) => e.id === f.carrier);
+        if (!c) { g.visible = false; continue; }
+        // Hidden in our own first-person view: it would block the screen
+        g.visible = !(c.id === opts.localId && opts.firstPerson);
+        const h = CHARACTERS[c.char] ? CHARACTERS[c.char].height : 1.6;
+        g.scale.setScalar(0.7);
+        g.position.set(c.pos.x, c.pos.y + h + 0.35 + Math.sin(t * 4) * 0.05, c.pos.z);
+        g.rotation.y = t * 2;
+      } else {
+        g.position.set(f.x, f.y + 0.05 + Math.abs(Math.sin(t * 3)) * 0.15, f.z);
+        g.rotation.y = t * 1.5;
+      }
+    }
+  }
+
   updateFlashlights(view, opts) {
+    const on = [];
+    if (view.phase !== 'pick') for (const e of view.entities) if (e.alive && e.flashlight) on.push(e);
+    // The real light goes to our own flashlight, otherwise the closest one
+    const cam = opts.camera;
+    const dist = (e) => (e.id === opts.localId ? -1 : Math.hypot(e.pos.x - cam.x, e.pos.z - cam.z));
+    on.sort((a, b) => dist(a) - dist(b));
+    this.flashLight.intensity = 0;
     let i = 0;
-    for (const e of view.entities) {
-      if (i >= this.spots.length) break;
-      if (!e.alive || !e.flashlight || view.phase === 'pick') continue;
-      const S = this.spots[i++];
+    for (const e of on) {
       const def = CHARACTERS[e.char];
       const eyeY = e.pos.y + def.eye * (e.crouch ? GAME.crouchHeightScale : 1);
       const d = lookDir(e.yaw, e.pitch);
       const isLocalFP = e.id === opts.localId && opts.firstPerson;
       const ox = e.pos.x + (isLocalFP ? 0 : d.x * 0.3), oz = e.pos.z + (isLocalFP ? 0 : d.z * 0.3);
-      S.light.intensity = 60;
-      S.light.position.set(ox, eyeY - 0.15, oz);
-      S.light.target.position.set(ox + d.x * 10, eyeY - 0.15 + d.y * 10, oz + d.z * 10);
-      S.cone.visible = !isLocalFP;
-      S.cone.position.set(ox, eyeY - 0.15, oz);
-      S.cone.rotation.set(e.pitch, e.yaw, 0, 'YXZ');
+      if (i === 0) {
+        const L = this.flashLight;
+        L.intensity = 60;
+        L.position.set(ox, eyeY - 0.15, oz);
+        L.target.position.set(ox + d.x * 10, eyeY - 0.15 + d.y * 10, oz + d.z * 10);
+      }
+      if (i < this.spots.length) {
+        const S = this.spots[i];
+        S.cone.visible = !isLocalFP;
+        S.cone.position.set(ox, eyeY - 0.15, oz);
+        S.cone.rotation.set(e.pitch, e.yaw, 0, 'YXZ');
+      }
+      i++;
     }
-    for (; i < this.spots.length; i++) {
-      this.spots[i].light.intensity = 0;
-      this.spots[i].cone.visible = false;
-    }
+    for (; i < this.spots.length; i++) this.spots[i].cone.visible = false;
   }
 
   updateViewmodel(view, opts, dt) {
@@ -530,7 +651,7 @@ export class Renderer {
       const spy = e.char === 'spy';
       pivot.traverse((o) => {
         if (!o.isMesh) return;
-        if (spy) o.material = new THREE.MeshBasicMaterial({ color: o.material.color, transparent: true, opacity: 0.35, depthWrite: false });
+        if (spy) o.material = new THREE.MeshBasicMaterial({ color: o.material.color, vertexColors: o.material.vertexColors, transparent: true, opacity: 0.35, depthWrite: false });
         o.castShadow = false;
         o.receiveShadow = false;
       });

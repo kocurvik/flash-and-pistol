@@ -54,6 +54,8 @@ export class BotBrain {
     this.retreatFrom = null;
     this.spyTarget = null;
     this.flankPoint = null;
+    this.role = null; // capture the treasure: 'attack' or 'defend'
+    this.guardSpot = null;
     this.useSpecials = Math.random() < this.diff.specialChance;
     this.idleFlash = Math.random() < this.diff.specialChance;
   }
@@ -115,6 +117,7 @@ export class BotBrain {
     ctx.nd = ctx.nearest ? dist3(e.pos, ctx.nearest.pos) : Infinity;
 
     const handled =
+      this.thinkObjective(ctx, true) ||
       (e.char === 'longman' && this.thinkLongman(ctx)) ||
       (e.char === 'builder' && this.thinkBuilder(ctx)) ||
       (e.char === 'doctor' && this.thinkDoctor(ctx)) ||
@@ -144,6 +147,8 @@ export class BotBrain {
     }
     // 2 + 3. Attack a visible enemy in range, or chase one within 20 m
     if (nearest && nd <= 20) { this.engage(nearest); return; }
+    // Capture the treasure: attack or defend instead of hunting and roaming
+    if (this.thinkObjective(ctx, false)) return;
     // Hunt the last place we saw someone
     if (this.lastKnown && sim.time - this.lastKnown.t < 6) {
       if (distXZ(e.pos, this.lastKnown) < 1.5) this.lastKnown = null;
@@ -166,6 +171,59 @@ export class BotBrain {
       this.roamGoal = nodes[Math.floor(Math.random() * nodes.length)];
     }
     this.goal = this.roamGoal;
+  }
+
+  // Capture the treasure. urgent: only what beats everything else (carrying the
+  // treasure, getting ours back, grabbing theirs when it is close).
+  thinkObjective(ctx, urgent) {
+    const { sim, e } = this;
+    if (sim.mode !== 'ctf' || !sim.flags.length) return false;
+    const mine = sim.flags.find((f) => f.team === e.team);
+    const theirs = sim.flags.find((f) => f.team !== e.team);
+    const near = ctx.nearest && ctx.nd <= this.range() + 0.3 ? ctx.nearest : null;
+    if (!this.role) {
+      const mates = sim.teamMembers(e.team);
+      this.role = e.char === 'builder' ? 'defend' : e.char === 'spy' ? 'attack' : (mates.indexOf(e) % 2 === 0 ? 'attack' : 'defend');
+    }
+    // Carrying: run home, only swinging at whoever blocks the way
+    if (theirs.carrier === e.id) {
+      this.goal = mine.home;
+      if (near) { this.target = near; this.wantAttack = Math.random() < this.diff.attackChance + 0.15; }
+      return true;
+    }
+    // Our treasure is lying around: the closest ones return it
+    if (mine.state === 'dropped' && distXZ(e.pos, mine) < 18) { this.goal = { x: mine.x, y: mine.y, z: mine.z }; return true; }
+    // Our treasure was taken: hunt the carrier (the gems glitter, so everyone knows where)
+    if (mine.state === 'carried') {
+      const c = sim.get(mine.carrier);
+      if (c && (this.role === 'defend' || distXZ(e.pos, c.pos) < 15)) {
+        if (dist3(e.pos, c.pos) <= this.range() + 0.2) this.engage(c);
+        else { this.target = near; this.goal = c.pos; this.wantAttack = !!near; }
+        return true;
+      }
+    }
+    // Their treasure is close and free: grab it
+    if (theirs.state !== 'carried' && distXZ(e.pos, theirs) < 10) {
+      this.goal = { x: theirs.x, y: theirs.y, z: theirs.z };
+      if (near) { this.target = near; this.wantAttack = true; }
+      return true;
+    }
+    if (urgent) return false;
+    if (this.role === 'attack') {
+      // Escort a teammate carrying their treasure, else go for it
+      const carrier = theirs.state === 'carried' ? sim.get(theirs.carrier) : null;
+      this.goal = carrier ? carrier.pos : { x: theirs.x, y: theirs.y, z: theirs.z };
+      return true;
+    }
+    // Defend: hold a spot near our treasure, facing the doors
+    if (!this.guardSpot || (distXZ(e.pos, this.guardSpot) < 1.5 && Math.random() < 0.05)) {
+      const h = mine.home;
+      const spots = sim.nav.nodes.filter((n) => { const d = distXZ(n, h); return d > 3 && d < 9; });
+      this.guardSpot = spots[Math.floor(Math.random() * spots.length)] || h;
+    }
+    this.goal = this.guardSpot;
+    if (distXZ(e.pos, this.guardSpot) < 1.5) this.lookYaw = yawTo(e.team === 'yellow' ? 1 : -1, 0) + Math.sin(sim.time * 0.6) * 0.7;
+    return true;
   }
 
   thinkLongman(ctx) {
@@ -251,7 +309,11 @@ export class BotBrain {
   pickBuildSpot() {
     const { sim, e } = this;
     const side = e.team === 'yellow' ? -1 : 1;
-    const cands = sim.nav.nodes.filter((n) => n.y === 0 && n.x * side > 2 && n.x * side < 13 && Math.abs(n.z) < 11);
+    // Capture the treasure: guard our treasure; otherwise cover the middle of our half
+    const home = sim.mode === 'ctf' ? sim.map.homes[e.team] : null;
+    const cands = home
+      ? sim.nav.nodes.filter((n) => n.y === 0 && distXZ(n, home) > 4 && distXZ(n, home) < 9)
+      : sim.nav.nodes.filter((n) => n.y === 0 && n.x * side > 2 && n.x * side < 13 && Math.abs(n.z) < 11);
     return cands[Math.floor(Math.random() * cands.length)] || { x: e.pos.x, y: 0, z: e.pos.z };
   }
 
@@ -314,12 +376,14 @@ export class BotBrain {
       enemies.sort((a, b) => (prio[a.char] - prio[b.char]) || (distXZ(e.pos, a.pos) - distXZ(e.pos, b.pos)));
       T = enemies[0] || null;
       this.spyTarget = T;
-      if (T && Math.abs(T.pos.z) < 12 && distXZ(e.pos, T.pos) > 14) {
+      if (T && sim.mode !== 'ctf' && Math.abs(T.pos.z) < 12 && distXZ(e.pos, T.pos) > 14) {
         const side = e.pos.z >= 0 ? 1 : -1;
-        this.flankPoint = { x: (e.pos.x + T.pos.x) / 2, y: 0, z: 16.5 * side };
+        this.flankPoint = { x: (e.pos.x + T.pos.x) / 2, y: 0, z: sim.map.flankZ * side };
       }
     }
     if (!T) return false;
+    // Capture the treasure: only mug enemies close by, otherwise go thieving
+    if (sim.mode === 'ctf' && distXZ(e.pos, T.pos) > 10) { this.spyTarget = null; return false; }
     // Sneak through a side corridor first
     if (this.flankPoint) {
       if (distXZ(e.pos, this.flankPoint) < 2.5 || distXZ(e.pos, T.pos) < 8) this.flankPoint = null;

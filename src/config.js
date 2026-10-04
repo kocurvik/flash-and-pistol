@@ -82,6 +82,14 @@ export const GAME = {
   lastStandPingMin: 0.5,
   lastStandReveal: 30,
   lastStandTime: 45,
+  // Capture the treasure (cave map): everyone respawns respawnTime s after dying.
+  // Walking over the enemy treasure picks it up; bringing it into your own base
+  // (within captureRadius of your treasure's home) wins the round.
+  ctfRoundTime: 300,
+  respawnTime: 5,
+  flagPickupRadius: 1.3,
+  captureRadius: 2.5,
+  flagReturnTime: 20,     // a dropped treasure goes home on its own after this
 };
 
 export const DIFFICULTY = {

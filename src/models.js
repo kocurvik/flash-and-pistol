@@ -3,6 +3,7 @@
 // silhouettes) with flat colors. render.js places and animates these.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TEAM_COLORS } from './config.js';
 
 export const SKIN = 0xe8c39e;
@@ -53,14 +54,15 @@ function cached(key, make) {
 
 export function boxGeo(w, h, d) { return cached(`b${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d)); }
 
-export function rboxGeo(w, h, d, r) {
+export function rboxGeo(w, h, d, r, seg) {
   const rr = r ?? Math.min(0.06, Math.min(w, h, d) * 0.25);
-  return cached(`rb${w},${h},${d},${rr}`, () => new RoundedBoxGeometry(w, h, d, 2, rr));
+  seg = seg ?? (rr >= 0.06 ? 2 : 1); // smooth bevels only where they are big enough to see
+  return cached(`rb${w},${h},${d},${rr},${seg}`, () => new RoundedBoxGeometry(w, h, d, seg, rr));
 }
 
-function capsuleGeo(r, len) { return cached(`c${r},${len}`, () => new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, 10)); }
-function sphereGeo(r) { return cached(`s${r}`, () => new THREE.SphereGeometry(r, 16, 12)); }
-function cylGeo(rt, rb, h, seg = 18) { return cached(`cy${rt},${rb},${h},${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg)); }
+function capsuleGeo(r, len) { return cached(`c${r},${len}`, () => new THREE.CapsuleGeometry(r, Math.max(0.001, len), 3, 8)); }
+function sphereGeo(r, w = 12, h = 8) { return cached(`s${r},${w},${h}`, () => new THREE.SphereGeometry(r, w, h)); }
+function cylGeo(rt, rb, h, seg = 12) { return cached(`cy${rt},${rb},${h},${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg)); }
 
 export function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   const m = new THREE.Mesh(geo, material);
@@ -94,6 +96,74 @@ function silhouette(points, thickness, bevel = 0.004) {
     g.computeVertexNormals();
     return g;
   });
+}
+
+// ---------- Merging (fewer draw calls) ----------
+
+// Shared vertex-colored materials, one per surface type
+const surfaceCache = new Map();
+function surfaceMat(m) {
+  const key = `${m.roughness}|${m.metalness}|${m.flatShading}`;
+  if (!surfaceCache.has(key)) {
+    surfaceCache.set(key, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: m.roughness, metalness: m.metalness, flatShading: m.flatShading,
+    }));
+  }
+  return surfaceCache.get(key);
+}
+
+// Materials that must stay as they are: textured, transparent, glowing or animated ones
+function keepsOwnMaterial(m) {
+  return !m.isMeshStandardMaterial || m.map || m.transparent || m.vertexColors || m.userData.keep ||
+    (m.emissive && m.emissive.getHex() !== 0 && m.emissiveIntensity > 0);
+}
+
+// Merges all meshes under root (skipping the `exclude` subtrees, e.g. animated
+// limbs) into one mesh per surface type. Part colors are baked into vertex colors.
+export function mergeGroup(root, exclude = new Set()) {
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert();
+  const meshes = [];
+  (function visit(o) {
+    for (const c of o.children) {
+      if (exclude.has(c)) continue;
+      if (c.isMesh && !c.isInstancedMesh) meshes.push(c);
+      visit(c);
+    }
+  })(root);
+  const buckets = new Map();
+  const m4 = new THREE.Matrix4();
+  for (const c of meshes) {
+    const own = keepsOwnMaterial(c.material);
+    const target = own ? c.material : surfaceMat(c.material);
+    let g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+    for (const name of Object.keys(g.attributes)) {
+      if (name !== 'position' && name !== 'normal' && !(name === 'uv' && target.map)) g.deleteAttribute(name);
+    }
+    g.clearGroups();
+    g.applyMatrix4(m4.multiplyMatrices(inv, c.matrixWorld));
+    if (!own) {
+      const n = g.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      const { r, g: gg, b } = c.material.color;
+      for (let i = 0; i < n; i++) { col[i * 3] = r; col[i * 3 + 1] = gg; col[i * 3 + 2] = b; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    }
+    if (!buckets.has(target)) buckets.set(target, { geos: [], cast: false, recv: false });
+    const bk = buckets.get(target);
+    bk.geos.push(g);
+    bk.cast ||= c.castShadow;
+    bk.recv ||= c.receiveShadow;
+    c.parent.remove(c);
+  }
+  for (const [material, bk] of buckets) {
+    const merged = new THREE.Mesh(mergeGeometries(bk.geos), material);
+    merged.castShadow = bk.cast;
+    merged.receiveShadow = bk.recv;
+    root.add(merged);
+    for (const g of bk.geos) g.dispose();
+  }
+  return root;
 }
 
 // ---------- Weapons ----------
@@ -164,7 +234,7 @@ export function buildWeapon(id) {
     default:
       break; // fists, kick: no model
   }
-  return g;
+  return mergeGroup(g);
 }
 
 // ---------- Characters (feet at origin, facing -z) ----------
@@ -298,6 +368,10 @@ export function buildCharacter(char, team) {
   const armLen = { longman: 0.78, builder: 0.62, doctor: 0.56, spy: 0.5 }[char];
   P.hand.position.set(0, -armLen + 0.05, 0);
   P.armR.add(P.hand);
+  if (P.lensMat) P.lensMat.userData.keep = true;
+  const limbs = [P.legL, P.legR, P.armL, P.armR].filter(Boolean);
+  mergeGroup(body, new Set(limbs));
+  for (const L of limbs) mergeGroup(L, new Set([P.hand]));
   return P;
 }
 
@@ -311,7 +385,7 @@ export function buildViewArm(char, team) {
   g.add(arm);
   // Fist wrapped around the grip
   g.add(part(rboxGeo(0.07, 0.085, 0.09, 0.03), mat(glove, char === 'doctor' ? 'metal' : 'cloth'), 0, -0.005, 0.01, false));
-  return g;
+  return mergeGroup(g);
 }
 
 // ---------- Tower ----------
@@ -355,7 +429,7 @@ export function buildTower(t) {
   flag.rotation.y = Math.PI / 2;
   g.add(flag);
   g.userData.flag = flag;
-  return g;
+  return mergeGroup(g, new Set([flag]));
 }
 
 // ---------- Arena ----------
@@ -389,6 +463,7 @@ function bannerTexture(team) {
 }
 
 export function buildArena(scene, map) {
+  const statics = new THREE.Group(); // merged into a few meshes at the end
   // Floor: flat-colored tiles with a little per-tile variation
   const pos = [], col = [], idx = [];
   const S = 2;
@@ -437,22 +512,12 @@ export function buildArena(scene, map) {
   for (const b of map.boxes) {
     const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
     const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, cz = (b.min[2] + b.max[2]) / 2;
-    const add = (m) => { m.receiveShadow = true; scene.add(m); return m; };
+    const add = (m) => { m.receiveShadow = true; statics.add(m); return m; };
+    const rb = (w, h, d, color, kind, x, y, z, r) => part(rboxGeo(w, h, d, r, 1), mat(color, kind), x, y, z);
     switch (b.kind) {
-      case 'crate': {
-        add(rb(w - 0.04, h - 0.04, d - 0.04, b.color, 'wood', cx, cy, cz, 0.03));
-        const t = Math.min(0.12, Math.min(w, h, d) * 0.1);
-        for (const sx of [-1, 1]) for (const sz of [-1, 1]) frames.push([cx + sx * (w / 2 - t / 2), cy, cz + sz * (d / 2 - t / 2), t + 0.01, h, t + 0.01]);
-        for (const sy of [-1, 1]) {
-          for (const sz of [-1, 1]) frames.push([cx, cy + sy * (h / 2 - t / 2), cz + sz * (d / 2 - t / 2), w, t + 0.01, t + 0.01]);
-          for (const sx of [-1, 1]) frames.push([cx + sx * (w / 2 - t / 2), cy + sy * (h / 2 - t / 2), cz, t + 0.01, t + 0.01, d]);
-        }
-        // Diagonal plank on the two long faces
-        const diag = part(boxGeo(Math.hypot(w, h) - t * 2, t * 0.8, 0.02), mat(shade(b.color, 0.75), 'wood'), cx, cy, cz);
-        diag.rotation.z = Math.atan2(h, w);
-        for (const sz of [-1, 1]) { const dd = diag.clone(); dd.position.z = cz + sz * (d / 2 + 0.005); add(dd); }
+      case 'crate':
+        addCrate(b, add, frames);
         break;
-      }
       case 'pillar':
         add(rb(w * 0.85, h, d * 0.85, b.color, 'stone', cx, cy, cz, 0.05));
         add(rb(w * 1.15, 0.3, d * 1.15, shade(b.color, 0.8), 'stone', cx, b.min[1] + 0.15, cz, 0.04));
@@ -474,49 +539,319 @@ export function buildArena(scene, map) {
         }
         break;
       }
-      default: { // walls: body, darker base, lighter cap, pilasters on long walls
+      default: // walls: body with a darker base and a lighter cap
         add(rb(w, h, d, b.color, 'stone', cx, cy, cz, 0.04));
-        add(rb(w + 0.1, 0.28, d + 0.1, shade(b.color, 0.72), 'stone', cx, b.min[1] + 0.14, cz, 0.03));
-        add(rb(w + 0.16, 0.16, d + 0.16, shade(b.color, 1.1), 'stone', cx, b.max[1] - 0.02, cz, 0.04));
-        const long = Math.max(w, d);
-        if (long > 6) {
-          const alongX = w > d;
-          for (let s = -long / 2 + 2.5; s < long / 2 - 1; s += 5) {
-            add(rb(alongX ? 0.45 : d + 0.24, h - 0.3, alongX ? d + 0.24 : 0.45, shade(b.color, 0.92), 'stone',
-              alongX ? cx + s : cx, cy - 0.05, alongX ? cz : cz + s, 0.04));
-          }
-        }
-      }
+        add(rb(w + 0.08, Math.min(0.25, h * 0.25), d + 0.08, shade(b.color, 0.72), 'stone', cx, b.min[1] + Math.min(0.125, h * 0.125), cz, 0.03));
+        add(rb(w + 0.14, 0.14, d + 0.14, shade(b.color, 1.1), 'stone', cx, b.max[1] - 0.02, cz, 0.04));
     }
   }
-  if (frames.length) {
-    const inst = new THREE.InstancedMesh(boxGeo(1, 1, 1), mat(0x5c3a1a, 'wood'), frames.length);
-    const m4 = new THREE.Matrix4();
-    frames.forEach(([x, y, z, sx, sy, sz], i) => {
-      m4.makeScale(sx, sy, sz).setPosition(x, y, z);
-      inst.setMatrixAt(i, m4);
-    });
-    inst.castShadow = true;
-    inst.receiveShadow = true;
-    scene.add(inst);
-  }
+  addCrateFrames(scene, frames);
+  addBanners(statics, map);
+  scene.add(mergeGroup(statics));
 
-  // Team banners with emblems on the back walls
+  buildScenery(scene);
+}
+
+// Wooden crate with an edge frame (collected in `frames`) and a diagonal plank
+function addCrate(b, add, frames) {
+  const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
+  const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, cz = (b.min[2] + b.max[2]) / 2;
+  add(part(rboxGeo(w - 0.04, h - 0.04, d - 0.04, 0.03, 1), mat(b.color, 'wood'), cx, cy, cz));
+  const t = Math.min(0.12, Math.min(w, h, d) * 0.1);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) frames.push([cx + sx * (w / 2 - t / 2), cy, cz + sz * (d / 2 - t / 2), t + 0.01, h, t + 0.01]);
+  for (const sy of [-1, 1]) {
+    for (const sz of [-1, 1]) frames.push([cx, cy + sy * (h / 2 - t / 2), cz + sz * (d / 2 - t / 2), w, t + 0.01, t + 0.01]);
+    for (const sx of [-1, 1]) frames.push([cx + sx * (w / 2 - t / 2), cy + sy * (h / 2 - t / 2), cz, t + 0.01, t + 0.01, d]);
+  }
+  // Diagonal plank on the two long faces
+  const diag = part(boxGeo(Math.hypot(w, h) - t * 2, t * 0.8, 0.02), mat(shade(b.color, 0.75), 'wood'), cx, cy, cz);
+  diag.rotation.z = Math.atan2(h, w);
+  for (const sz of [-1, 1]) { const dd = diag.clone(); dd.position.z = cz + sz * (d / 2 + 0.005); add(dd); }
+}
+
+// Crate edge frames for every crate in one instanced mesh
+function addCrateFrames(root, frames) {
+  if (!frames.length) return;
+  const inst = new THREE.InstancedMesh(boxGeo(1, 1, 1), mat(0x5c3a1a, 'wood'), frames.length);
+  const m4 = new THREE.Matrix4();
+  frames.forEach(([x, y, z, sx, sy, sz], i) => {
+    m4.makeScale(sx, sy, sz).setPosition(x, y, z);
+    inst.setMatrixAt(i, m4);
+  });
+  inst.castShadow = true;
+  inst.receiveShadow = true;
+  root.add(inst);
+}
+
+// Team banners with emblems on the back walls
+function addBanners(statics, map) {
   for (const dcr of map.decor) {
     if (dcr.kind !== 'banner') continue;
     const h = dcr.max[1] - dcr.min[1], d = dcr.max[2] - dcr.min[2];
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(d, h), new THREE.MeshStandardMaterial({ map: bannerTexture(dcr.team), roughness: 0.9 }));
     const facing = dcr.team === 'yellow' ? 1 : -1;
-    banner.position.set(dcr.team === 'yellow' ? -29.93 : 29.93, (dcr.min[1] + dcr.max[1]) / 2, 0);
+    banner.position.set((dcr.min[0] + dcr.max[0]) / 2, (dcr.min[1] + dcr.max[1]) / 2, (dcr.min[2] + dcr.max[2]) / 2);
     banner.rotation.y = facing * Math.PI / 2;
     banner.receiveShadow = true;
-    scene.add(banner);
-    const rodM = part(cylGeo(0.06, 0.06, d + 0.6), mat(0x5c3a1a, 'wood'), banner.position.x + facing * 0.08, dcr.max[1] + 0.05, 0);
+    statics.add(banner);
+    const rodM = part(cylGeo(0.06, 0.06, d + 0.6), mat(0x5c3a1a, 'wood'), banner.position.x + facing * 0.08, dcr.max[1] + 0.05, banner.position.z);
     rodM.rotation.x = Math.PI / 2;
-    scene.add(rodM);
+    statics.add(rodM);
+  }
+}
+
+// ---------- Crystal Cave ----------
+
+// Builds the cave into root. Returns the flickering torch lights and flames.
+export function buildCave(root, map) {
+  const statics = new THREE.Group();
+  const frames = [];
+  const B = map.bounds;
+  let seed = 19;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const rocks = map.boxes.filter((b) => b.kind === 'rock');
+  const inRock = (x, y, z) => rocks.some((b) => x > b.min[0] && x < b.max[0] && y > b.min[1] && y < b.max[1] && z > b.min[2] && z < b.max[2]);
+
+  // Floor: uneven stone slabs, warmer in the team bases
+  const floors = map.decor.filter((d) => d.kind === 'floor');
+  const pos = [], col = [], idx = [];
+  let v = 0;
+  const S = 2;
+  for (let x = B.minX; x < B.maxX; x += S) {
+    for (let z = B.minZ; z < B.maxZ; z += S) {
+      if (inRock(x + 1, 0.5, z + 1) && inRock(x + 0.1, 0.5, z + 0.1) && inRock(x + 1.9, 0.5, z + 1.9)) continue;
+      const odd = (x / S + z / S) & 1;
+      let base = odd ? 0x6a6158 : 0x645b52;
+      const fl = floors.find((d) => x + 1 > d.min[0] && x + 1 < d.max[0] && z + 1 > d.min[2] && z + 1 < d.max[2]);
+      if (fl) base = fl.team === 'yellow' ? (odd ? 0x8a7a4c : 0x847346) : (odd ? 0x4c7a74 : 0x46736e);
+      const c = new THREE.Color(base).multiplyScalar(0.88 + rand() * 0.18);
+      const g = 0.05;
+      pos.push(x + g, 0, z + g, x + S - g, 0, z + g, x + S - g, 0, z + S - g, x + g, 0, z + S - g);
+      for (let k = 0; k < 4; k++) col.push(c.r, c.g, c.b);
+      idx.push(v, v + 2, v + 1, v, v + 3, v + 2);
+      v += 4;
+    }
+  }
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  fg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  fg.setIndex(idx);
+  fg.computeVertexNormals();
+  const floor = new THREE.Mesh(fg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  floor.position.y = 0.002;
+  floor.receiveShadow = true;
+  root.add(floor);
+  const grout = new THREE.Mesh(new THREE.PlaneGeometry(B.maxX - B.minX, B.maxZ - B.minZ), mat(0x3a342f, 'stone'));
+  grout.rotation.x = -Math.PI / 2;
+  grout.receiveShadow = true;
+  root.add(grout);
+
+  // Rock walls: blocky bodies with boulders piled along the visible faces
+  const boulders = [];
+  for (const b of map.boxes) {
+    const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
+    const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, cz = (b.min[2] + b.max[2]) / 2;
+    const add = (m) => { m.receiveShadow = true; statics.add(m); return m; };
+    switch (b.kind) {
+      case 'rock': {
+        add(part(boxGeo(w, h, d), mat(shade(b.color, 0.9 + rand() * 0.2), 'stone'), cx, cy, cz));
+        // Boulders along each face, only where the face is open to the cave
+        const faces = [
+          { ax: 'x', at: b.min[0], out: -1, from: b.min[2], to: b.max[2] },
+          { ax: 'x', at: b.max[0], out: 1, from: b.min[2], to: b.max[2] },
+          { ax: 'z', at: b.min[2], out: -1, from: b.min[0], to: b.max[0] },
+          { ax: 'z', at: b.max[2], out: 1, from: b.min[0], to: b.max[0] },
+        ];
+        for (const f of faces) {
+          const len = f.to - f.from;
+          const n = Math.max(1, Math.round(len / 1.4));
+          for (let i = 0; i < n; i++) {
+            const t = f.from + (i + 0.5) * (len / n) + (rand() - 0.5) * 0.5;
+            const rows = h > 3 ? [b.min[1] + 0.45, b.min[1] + 1.9 + rand() * 1.2, b.max[1] - 0.6] : [b.min[1] + Math.min(0.45, h / 2)];
+            for (const y of rows) {
+              const r = 0.55 + rand() * 0.5;
+              const x = f.ax === 'x' ? f.at + f.out * 0.3 : t, z = f.ax === 'z' ? f.at + f.out * 0.3 : t;
+              if (x <= B.minX || x >= B.maxX || z <= B.minZ || z >= B.maxZ || inRock(x, y, z)) continue;
+              // Center inside the rock so a boulder sticks out at most 0.3 m
+              boulders.push([f.ax === 'x' ? f.at - f.out * (r - 0.3) : t, y, f.ax === 'z' ? f.at - f.out * (r - 0.3) : t, r, rand()]);
+            }
+          }
+        }
+        break;
+      }
+      case 'ceiling': {
+        const ceil = part(new THREE.PlaneGeometry(w, d), mat(0x2f2a26, 'stone'), cx, b.min[1], cz, false);
+        ceil.rotation.x = Math.PI / 2; // faces down
+        ceil.receiveShadow = true;
+        root.add(ceil);
+        break;
+      }
+      case 'column': {
+        const r = Math.min(w, d) / 2;
+        const colM = mat(b.color, { rough: 0.9 });
+        add(part(cylGeo(r * 0.75, r * 1.05, h, 9), colM, cx, cy, cz));
+        add(part(cylGeo(r * 1.05, r * 1.4, 0.9, 9), colM, cx, b.min[1] + 0.45, cz));
+        add(part(cylGeo(r * 1.4, r * 0.75, 1.1, 9), colM, cx, b.max[1] - 0.55, cz));
+        break;
+      }
+      case 'stalagmite': {
+        const r = Math.min(w, d) / 2;
+        add(part(cylGeo(0.06, r * 1.15, h, 8), mat(b.color, { rough: 0.9 }), cx, cy, cz));
+        add(part(cylGeo(0.3, r * 1.4, 0.5, 8), mat(shade(b.color, 0.9), { rough: 0.9 }), cx, b.min[1] + 0.25, cz));
+        break;
+      }
+      case 'boulder': {
+        const m = add(part(new THREE.IcosahedronGeometry(1, 1), mat(b.color, { rough: 0.95 }), cx, b.min[1] + h * 0.42, cz));
+        m.scale.set(w * 0.58, h * 0.62, d * 0.58);
+        m.rotation.y = rand() * Math.PI;
+        break;
+      }
+      case 'ledge':
+        add(part(rboxGeo(w, h, d, 0.06, 1), mat(shade(b.color, 0.85), 'stone'), cx, cy, cz));
+        add(part(boxGeo(w - 0.08, 0.04, d - 0.08), mat(b.color, 'stone'), cx, b.max[1] + 0.005, cz));
+        break;
+      case 'crate':
+        addCrate(b, add, frames);
+        break;
+    }
+  }
+  // All boulders in one instanced mesh with per-boulder color and rotation
+  const rockMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+  const bm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), rockMat, boulders.length);
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e3 = new THREE.Euler();
+  boulders.forEach(([x, y, z, r, k], i) => {
+    q.setFromEuler(e3.set(k * 6, k * 17, k * 3));
+    m4.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(r, r * (0.7 + k * 0.4), r));
+    bm.setMatrixAt(i, m4);
+    bm.setColorAt(i, new THREE.Color(k < 0.5 ? 0x5a5149 : 0x655b51).multiplyScalar(0.85 + k * 0.3));
+  });
+  bm.castShadow = true;
+  bm.receiveShadow = true;
+  root.add(bm);
+
+  // Stalactites hanging from the ceiling, kept above head height
+  const H = map.ceiling;
+  const drips = [];
+  for (let i = 0; i < 400 && drips.length < 110; i++) {
+    const x = B.minX + rand() * (B.maxX - B.minX), z = B.minZ + rand() * (B.maxZ - B.minZ);
+    if (inRock(x, H - 0.5, z)) continue;
+    if (Math.abs(x) < 4.5 && Math.abs(z) < 4) continue; // headroom over the platform
+    drips.push([x, z, 0.5 + rand() * 1.0, 0.12 + rand() * 0.22, rand()]);
+  }
+  const dm = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7), new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), drips.length);
+  drips.forEach(([x, z, len, r, k], i) => {
+    q.setFromEuler(e3.set(Math.PI, k * 6, 0));
+    m4.compose(new THREE.Vector3(x, H - len / 2, z), q, new THREE.Vector3(r, len, r));
+    dm.setMatrixAt(i, m4);
+    dm.setColorAt(i, new THREE.Color(0x5a5149).multiplyScalar(0.8 + k * 0.4));
+  });
+  root.add(dm);
+
+  // Torches and crystals (merged into the statics, except the flickering flames)
+  const lights = [];
+  const flames = [];
+  const flameGeo = new THREE.ConeGeometry(0.1, 0.32, 8);
+  const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.3, 0.4) });
+  const crystalMats = new Map();
+  for (const dcr of map.decor) {
+    if (dcr.kind === 'torch') {
+      const g = new THREE.Group();
+      g.position.set(dcr.x, dcr.y, dcr.z);
+      g.rotation.y = dcr.face > 0 ? -Math.PI / 2 : Math.PI / 2; // lean away from the wall
+      const stick = part(cylGeo(0.05, 0.035, 0.6, 8), mat(0x5c3a1a, 'wood'), 0, 0, 0);
+      stick.rotation.x = -0.5;
+      g.add(stick);
+      g.add(part(cylGeo(0.08, 0.06, 0.12, 8), mat(0x3a3f47, 'metal'), 0, 0.25, -0.13));
+      const flame = new THREE.Mesh(flameGeo, flameMat);
+      flame.position.set(0, 0.45, -0.15);
+      g.add(flame);
+      statics.add(g);
+      g.updateMatrixWorld(true);
+      root.attach(flame);
+      flames.push(flame);
+      if (dcr.light) {
+        const L = new THREE.PointLight(0xffa04a, 22, 20, 1.5);
+        L.position.set(dcr.x + dcr.face * 0.4, dcr.y + 0.6, dcr.z);
+        root.add(L);
+        lights.push({ light: L, base: 22, phase: rand() * 10 });
+      }
+    } else if (dcr.kind === 'crystal') {
+      if (!crystalMats.has(dcr.color)) {
+        crystalMats.set(dcr.color, new THREE.MeshStandardMaterial({ color: dcr.color, emissive: dcr.color, emissiveIntensity: 0.9, roughness: 0.2, flatShading: true }));
+      }
+      const cm = crystalMats.get(dcr.color);
+      const g = new THREE.Group();
+      g.position.set(dcr.x, dcr.y, dcr.z);
+      const n = 5 + Math.floor(rand() * 4);
+      for (let i = 0; i < n; i++) {
+        const s = dcr.size * (0.35 + rand() * 0.65);
+        const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), cm);
+        c.scale.set(s, s * 3.2, s);
+        c.position.set((rand() - 0.5) * dcr.size * 1.2, s * 0.5, (rand() - 0.5) * dcr.size * 0.5);
+        c.rotation.set((rand() - 0.5) * 0.9, rand() * 3, (rand() - 0.5) * 0.9);
+        g.add(c);
+      }
+      statics.add(g);
+      if (dcr.light) {
+        const L = new THREE.PointLight(dcr.color, 16, 18, 1.5);
+        L.position.set(dcr.x, 1.6, dcr.z - Math.sign(dcr.z) * 1.2);
+        root.add(L);
+      }
+    }
   }
 
-  buildScenery(scene);
+  addCrateFrames(root, frames);
+  addBanners(statics, map);
+  root.add(mergeGroup(statics));
+  return { lights, flames };
+}
+
+// ---------- Treasure (capture the treasure) ----------
+
+// Open wooden chest that marks a team's base; the gems sit in it when home
+export function buildTreasureChest(team) {
+  const g = new THREE.Group();
+  const wood = 0x7a4a22, gold = 0xd9a520;
+  g.add(rb(0.95, 0.5, 0.62, wood, 'wood', 0, 0.25, 0, 0.04));
+  for (const sx of [-1, 1]) g.add(rb(0.08, 0.52, 0.66, gold, 'metal', sx * 0.33, 0.26, 0, 0.02));
+  g.add(rb(0.97, 0.08, 0.64, TEAM_COLORS[team], 'paint', 0, 0.06, 0, 0.02));
+  // Lid tipped open toward the back
+  const lid = new THREE.Group();
+  lid.position.set(0, 0.5, 0.31);
+  lid.rotation.x = -1.9;
+  const top = part(new THREE.CylinderGeometry(0.31, 0.31, 0.95, 12, 1, false, 0, Math.PI), mat(wood, 'wood'), 0, 0, -0.31);
+  top.rotation.z = Math.PI / 2;
+  lid.add(top);
+  g.add(lid);
+  g.add(rb(0.12, 0.14, 0.04, gold, 'metal', 0, 0.38, -0.32, 0.01));
+  return mergeGroup(g);
+}
+
+// A heap of team-colored gems with a few gold coins; glows so it reads in the dark
+export function buildGems(team) {
+  const g = new THREE.Group();
+  const color = team === 'yellow' ? 0xffcf3a : 0x2fe0d0;
+  const gem = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.55, roughness: 0.12, metalness: 0.1, flatShading: true });
+  const coin = mat(0xe8b830, { rough: 0.3, metal: 0.8 });
+  let seed = team === 'yellow' ? 5 : 9;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 14; i++) {
+    const a = rand() * Math.PI * 2, r = rand() * 0.3;
+    const s = 0.07 + rand() * 0.07;
+    const m = new THREE.Mesh(i % 3 ? new THREE.OctahedronGeometry(s, 0) : new THREE.IcosahedronGeometry(s, 0), gem);
+    m.position.set(Math.cos(a) * r, (0.32 - r) * 0.7 + s * 0.6, Math.sin(a) * r);
+    m.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+    g.add(m);
+  }
+  for (let i = 0; i < 7; i++) {
+    const a = rand() * Math.PI * 2, r = 0.1 + rand() * 0.26;
+    const m = part(cylGeo(0.055, 0.055, 0.015, 12), coin, Math.cos(a) * r, 0.03 + rand() * 0.08, Math.sin(a) * r, false);
+    m.rotation.set(rand() * 0.8, 0, rand() * 0.8);
+    g.add(m);
+  }
+  return mergeGroup(g);
 }
 
 // ---------- Sky and scenery outside the walls ----------
@@ -550,14 +885,16 @@ function buildScenery(scene) {
   scene.add(sky);
 
   // Rolling hills
+  const hills = new THREE.Group();
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + 0.2;
     const r = 110 + (i % 3) * 22;
-    const hill = new THREE.Mesh(new THREE.SphereGeometry(26 + (i % 4) * 9, 20, 12), mat(i % 2 ? 0x86ad6a : 0x7da362, 'stone'));
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(26 + (i % 4) * 9, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(i % 2 ? 0x86ad6a : 0x7da362, 'stone'));
     hill.position.set(Math.cos(a) * r, -10, Math.sin(a) * r);
     hill.scale.y = 0.55;
-    scene.add(hill);
+    hills.add(hill);
   }
+  scene.add(mergeGroup(hills));
 
   // A ring of trees peeking over the walls
   const trees = [];
@@ -584,7 +921,7 @@ function buildScenery(scene) {
       crown.setColorAt(i * 2 + k, new THREE.Color(greens[Math.floor(t.c * greens.length + k) % greens.length]));
     }
   });
-  trunk.castShadow = crown.castShadow = true;
+  // Outside the shadow area anyway: no shadow casting keeps the shadow pass cheap
   scene.add(trunk, crown);
 }
 
@@ -598,7 +935,7 @@ export function buildClouds(scene) {
     const c = new THREE.Group();
     const n = 4 + Math.floor(rand() * 4);
     for (let k = 0; k < n; k++) {
-      const p = new THREE.Mesh(sphereGeo(4 + rand() * 4), cloudMat);
+      const p = new THREE.Mesh(sphereGeo(4 + rand() * 4, 9, 6), cloudMat);
       p.position.set(k * 4.5 - n * 2, rand() * 2, rand() * 4 - 2);
       p.scale.y = 0.55;
       c.add(p);
@@ -609,6 +946,6 @@ export function buildClouds(scene) {
     group.add(c);
   }
   scene.add(group);
-  return group;
+  return mergeGroup(group);
 }
 

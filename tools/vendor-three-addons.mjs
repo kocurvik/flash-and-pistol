@@ -16,6 +16,7 @@ const ENTRY = [
   'postprocessing/UnrealBloomPass.js',
   'postprocessing/OutputPass.js',
   'postprocessing/GTAOPass.js',
+  'utils/BufferGeometryUtils.js',
 ];
 
 const done = new Set();

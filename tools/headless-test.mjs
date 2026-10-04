@@ -1,10 +1,11 @@
 // Runs bot-only matches without a browser to catch simulation errors and
-// sanity-check balance. Usage: node tools/headless-test.mjs [matches] [teamSize] [difficulty]
+// sanity-check balance. Usage: node tools/headless-test.mjs [matches] [teamSize] [difficulty] [map]
 import { Sim } from '../src/sim.js';
 
 const matches = +(process.argv[2] || 3);
 const teamSize = +(process.argv[3] || 4);
 const difficulty = process.argv[4] || 'normal';
+const mapId = process.argv[5] || 'arena';
 const dt = 1 / 60;
 
 const totals = {};
@@ -13,7 +14,7 @@ const roundLengths = [];
 const wins = { yellow: 0, teal: 0 };
 
 for (let m = 0; m < matches; m++) {
-  const sim = new Sim({ teamSize, difficulty });
+  const sim = new Sim({ teamSize, difficulty, mapId });
   sim.newMatch();
   let roundStart = 0;
   let steps = 0;

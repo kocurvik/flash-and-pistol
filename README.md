@@ -1,7 +1,7 @@
 # Flash and Pištol
 
 A tiny 3D first-person team brawler for the browser: Yellow vs Teal, four characters
-(Longman, Builder, Doctor, Spy), best of 5 rounds. Design: [spec.md](spec.md).
+(Longman, Builder, Doctor, Spy), best of 5 rounds, two maps. Design: [spec.md](spec.md).
 
 ## Play
 
@@ -12,8 +12,10 @@ server and opens the game in your browser. Click **Play vs Bots** and you're in.
 Three.js and the add-ons it uses (`vendor/addons`, fetched by `node tools/vendor-three-addons.mjs`)
 are bundled, so the game works without an internet connection.
 
-**Graphics** (Settings, or the pause menu): *Low* renders directly and is the fastest; *Medium*
-(default) adds bloom and smooth edges; *High* adds ambient occlusion and sharper shadows.
+**Graphics** (Settings, or the pause menu): *Low* is the fastest; *Medium* (default) has
+smooth edges and sharp shadows; *High* adds soft shadows and glow effects; *Ultra* adds
+ambient occlusion and is meant for strong graphics cards. On an Intel UHD laptop GPU at
+720p this measured roughly Low 210, Medium 160, High 60 and Ultra 20 FPS.
 
 ## Play with friends on the same network (LAN)
 
@@ -25,6 +27,17 @@ are bundled, so the game works without an internet connection.
 
 If friends can't connect, allow Node.js through the Windows firewall for *private networks*
 (Windows asks the first time). Also check that everyone is on the same Wi-Fi.
+
+## Maps
+
+Pick the map on the main menu; when hosting, the host can change it in the lobby.
+
+- **Arena** (last team standing): an outdoor arena. Eliminate the other team to win the round.
+- **Crystal Cave** (capture the treasure): a symmetric cave with chokepoints. Each team guards
+  a chest of gems in its base. Walk over the enemy treasure to pick it up, and bring it into
+  the ring around your own chest to win the round. A carrier who dies drops the treasure;
+  teammates of its owners send it home by walking over it, otherwise it returns after 20 s.
+  Everyone respawns 5 s after dying, and can press 1–4 while waiting to switch character.
 
 ## Controls
 
@@ -38,7 +51,7 @@ If friends can't connect, allow Node.js through the Windows firewall for *privat
 | Collapse your tower (Builder, standing on it) | Shift + Space |
 | Flashlight (Longman) | F |
 | Switch weapon | 1 / 2 / mouse wheel |
-| Pick character (pick screen) | 1 – 4 |
+| Pick character (pick screen, or while respawning in the cave) | 1 – 4 |
 
 All of these except Esc and the pick keys can be changed under **Change controls** on the main
 menu, or **Controls** in the pause menu. Each action can have two keys or mouse buttons.
@@ -67,11 +80,11 @@ No build step: plain ES modules, served as-is.
 | File | What it does |
 | --- | --- |
 | `src/config.js` | **All balance numbers**: characters, weapons, timers, bot difficulty |
-| `src/map.js` | The arena (boxes), spawns, bot lanes |
+| `src/map.js` | Both maps (boxes), spawns, treasure homes, bot lanes |
 | `src/physics.js` | Movement, collisions, climbing, ground-pound, raycasts, waypoint graph + A* |
-| `src/sim.js` | Authoritative game rules: rounds, picks, combat, steal, towers, bottles, flashlight |
+| `src/sim.js` | Authoritative game rules: rounds, picks, combat, steal, towers, bottles, flashlight, treasures and respawns |
 | `src/bots.js` | Bot brains: the spec's priority rules + per-character rules |
-| `src/models.js` | Meshes: weapons, characters, towers, arena details, sky and scenery |
+| `src/models.js` | Meshes: weapons, characters, towers, treasure, arena and cave details, sky and scenery |
 | `src/render.js` | Three.js scene, lighting, graphics quality and post-processing, animation, effects |
 | `src/hud.js`, `src/input.js`, `src/audio.js` | HUD, keyboard/mouse, synthesized sounds |
 | `src/net.js` | Relay connection, host session, client view with interpolation |
@@ -82,7 +95,8 @@ No build step: plain ES modules, served as-is.
 
 ```
 node tools/headless-test.mjs 10 4 hard   # 10 bot-only matches, prints balance stats
-node tools/rules-test.mjs                # checks Spy cloak, last stand and nail gun rules
+node tools/headless-test.mjs 4 4 normal cave   # the same in the Crystal Cave
+node tools/rules-test.mjs                # checks Spy cloak, last stand, nail gun and treasure rules
 node tools/relay-test.mjs 8080           # smoke test for the running relay server
 node tools/browser-test.mjs <outDir>     # drives headless Chrome, saves screenshots
 ```

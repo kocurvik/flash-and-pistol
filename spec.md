@@ -14,7 +14,7 @@ Core loop: pick a character → fight in the arena → when you die, wait for th
 
 ## Game rules
 
-A match is best of 5 rounds; a round ends when one team has no living players *(assumption)*.
+A match is best of 5 rounds; a round ends when one team has no living players *(assumption)*. On the Crystal Cave map the rules are different: see [Crystal Cave: capture the treasure](#crystal-cave-capture-the-treasure).
 
 - **Teams:** Yellow and Teal, 4 players each by default. Bots fill any empty slot. Team size is configurable from 1 to 6.
 - **Hearts:** health is counted in whole hearts. Every hit removes or restores whole hearts, so it is easy to read. Max hearts depend on the character.
@@ -85,11 +85,23 @@ Every character beats one other and loses to another, so no single pick is alway
 - **The Spy risk:** the designer wanted picking Spy again to feel risky. With 3 hearts and a hard counter (flashlight), a careless Spy dies early and sits out the round.
 - **Main tuning knobs:** Spy flicker time, flashlight range, tower damage and cooldown, Doctor heal amounts. Change these first if a character feels too strong or weak.
 
+## Crystal Cave: capture the treasure
+
+A second map, picked on the main menu (or by the host in the lobby). It comes with its own mode.
+
+- **Map:** a symmetric cave, about 72 × 36 m with a 7 m ceiling. Each base is a torch-lit chamber with the team's treasure in an open chest. A base opens through two 3 m doors into side lanes. The side lanes reach the crystal-lit middle cavern through three chokepoints: two 3.5 m gaps and a low tunnel in the center. The middle cavern has a raised rock platform and four floor-to-ceiling columns.
+- **Treasure:** each team's "flag" is a heap of gems in its team color. An enemy picks it up by walking over it. The gems float above the carrier's head, and a Spy carrying them stays visible.
+- **Dropping:** when the carrier dies, the treasure drops where they fell. A teammate of its owners who walks over it sends it straight home; otherwise it goes home on its own after 20 s *(assumption)*.
+- **Winning a round:** carry the enemy treasure into the ring around your own team's chest. Your own treasure does not have to be at home *(assumption: avoids stalemates)*. A match is still first to 3 rounds.
+- **Respawning:** everyone respawns in their base 5 s after dying. While waiting, a player can press 1–4 to come back as a different character, which keeps the designer's Spy rule. A player who joins mid-round picks a character and spawns right away.
+- **Round timer:** 5 minutes. If nobody captures a treasure, the round is a draw *(assumption)*. The last stand rule does not apply, since nobody stays dead.
+- **Bots:** half of each team attacks and half defends; Builders always defend and Spies always attack. Any bot carrying the treasure runs home, defenders hunt the enemy carrier, nearby bots return a dropped treasure, and any bot close to the enemy treasure grabs it.
+
 ## Map, controls and HUD
 
-One symmetric arena about 60 × 40 m, built from simple boxes *(assumption)*.
+The Arena: one symmetric arena about 60 × 40 m, built from simple boxes *(assumption)*.
 
-- **Layout:** Yellow base at one end, Teal base at the other, an open middle field, and two side corridors. Crates and pillars give cover. A raised walkway in the middle rewards Doctor double jumps and Builder towers.
+- **Layout:** Yellow base at one end, Teal base at the other, an open middle field, and two side lanes marked by low cover walls. Crates, pillars and waist-high walls give cover. A raised walkway in the middle rewards Doctor double jumps and Builder towers.
 - **Look:** flat colors, no textures. Characters are built from boxes and cylinders, tinted yellow or teal. Each character has a clear shape: Longman tall and thin, Builder wide, Doctor a metal robot, Spy small.
 
 | Action | Key |
@@ -105,7 +117,7 @@ One symmetric arena about 60 × 40 m, built from simple boxes *(assumption)*.
 | Scoreboard | Tab |
 | Pause | Esc |
 
-**HUD:** hearts in the bottom left, current weapon and special cooldown in the bottom right, crosshair in the center, round score and timer at the top, and a small kill feed in the top right.
+**HUD:** hearts in the bottom left, current weapon and special cooldown in the bottom right, crosshair in the center, round score and timer at the top, and a small kill feed in the top right. In the Crystal Cave, each treasure's status (at home, taken by whom, or dropped) shows under the score, and the respawn countdown shows while dead.
 
 ## Bot behavior (offline play)
 
@@ -123,7 +135,7 @@ Bots use a simple priority list checked about 5 times per second: they do the fi
 - **Longman bot:** uses the medkit at ≤ 3 hearts. Turns on the flashlight when hit by something it cannot see, and sweeps it around.
 - **Builder bot:** builds a tower near a waypoint enemies often pass. When 2 or more enemies are within 3 m of its tower, climbs up and collapses it.
 - **Doctor bot:** follows the most injured teammate and swings the axe at them until healed. Throws the bottle when 2 or more teammates are hurt and close together. Only fights when nobody needs healing.
-- **Spy bot:** sneaks around the side corridors toward the enemy Doctor or Builder, steals their weapon, then attacks from behind with it. Retreats from any lit flashlight.
+- **Spy bot:** sneaks along the side lanes toward the enemy Doctor or Builder, steals their weapon, then attacks from behind with it. Retreats from any lit flashlight.
 
 **Difficulty:** Easy, Normal and Hard change reaction delay (0.8 / 0.4 / 0.2 s), aim wobble and how often bots use specials. Bots cannot see an invisible Spy unless he is flickering or in a flashlight beam, the same as players.
 

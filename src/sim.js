@@ -22,14 +22,13 @@ export function emptyInput(yaw = 0) {
 const r2 = (v) => Math.round(v * 100) / 100;
 
 export class Sim {
-  constructor({ teamSize = GAME.teamSize, difficulty = 'normal' } = {}) {
-    this.map = buildMap();
-    this.nav = buildNav(this.map.boxes);
+  constructor({ teamSize = GAME.teamSize, difficulty = 'normal', mapId = 'arena' } = {}) {
     this.teamSize = teamSize;
     this.difficulty = difficulty;
     this.entities = [];
     this.towers = [];
     this.projectiles = [];
+    this.flags = [];
     this.events = [];
     this.time = 0;
     this.phase = 'lobby';
@@ -40,8 +39,22 @@ export class Sim {
     this.matchWinner = null;
     this.nextId = 1;
     this.botNameIdx = Math.floor(Math.random() * BOT_NAMES.length);
-    this.solids = this.map.boxes.slice();
+    this.setMap(mapId);
   }
+
+  // Only between matches: the lobby switches maps
+  setMap(id) {
+    this.map = buildMap(id);
+    this.mapId = this.map.id;
+    this.mode = this.map.mode; // 'elimination' | 'ctf'
+    this.nav = buildNav(this.map.boxes, this.map.bounds);
+    this.towers = [];
+    this.projectiles = [];
+    this.flags = [];
+    this.updateSolids();
+  }
+
+  roundTime() { return this.mode === 'ctf' ? GAME.ctfRoundTime : GAME.roundTime; }
 
   // ---------- Roster ----------
 
@@ -57,7 +70,7 @@ export class Sim {
       attackCd: 0, specialCd: 0, specialMax: 1, buildT: 0,
       flashlight: false, flickerT: 0, revealed: false,
       attackSeq: 0, spawnSeq: 0, kills: 0, deaths: 0, heals: 0,
-      lastHurtT: -99, lastAttacker: null, towerId: null, deathT: 0,
+      lastHurtT: -99, lastAttacker: null, towerId: null, deathT: 0, respawnT: 0, captures: 0,
       cloakT: 0, onTower: false, prevWeapon: null,
       input: emptyInput(), net: { spc: 0, flc: 0, pdc: 0 },
       brain: null,
@@ -159,7 +172,7 @@ export class Sim {
     this.score = { yellow: 0, teal: 0 };
     this.round = 0;
     this.matchWinner = null;
-    for (const e of this.entities) { e.kills = 0; e.deaths = 0; e.heals = 0; }
+    for (const e of this.entities) { e.kills = 0; e.deaths = 0; e.heals = 0; e.captures = 0; }
     this.fillBots();
     this.startPick();
   }
@@ -170,6 +183,7 @@ export class Sim {
     this.score = { yellow: 0, teal: 0 };
     this.towers = [];
     this.projectiles = [];
+    this.flags = [];
     this.updateSolids();
     for (const e of this.entities) { e.alive = false; e.pick = null; e.flashlight = false; }
   }
@@ -198,7 +212,10 @@ export class Sim {
 
   setPick(id, char) {
     const e = this.get(id);
-    if (!e || this.phase !== 'pick' || !this.canPick(e, char)) return false;
+    if (!e || !this.canPick(e, char)) return false;
+    // With respawns, the dead may switch character for their next life
+    const respawning = this.mode === 'ctf' && !e.alive && (this.phase === 'countdown' || this.phase === 'play');
+    if (this.phase !== 'pick' && !respawning) return false;
     e.pick = char;
     this.emit({ type: 'pick', id, char });
     return true;
@@ -249,8 +266,12 @@ export class Sim {
     }
     for (const team of TEAMS) {
       const spawns = this.map.spawns[team];
-      this.teamMembers(team).forEach((e, i) => this.spawn(e, spawns[i % spawns.length]));
+      this.teamMembers(team).forEach((e, i) => { e.respawnT = 0; this.spawn(e, spawns[i % spawns.length]); });
     }
+    this.flags = this.mode === 'ctf' ? TEAMS.map((team) => {
+      const h = this.map.homes[team];
+      return { team, home: { ...h }, x: h.x, y: h.y, z: h.z, state: 'home', carrier: null, dropT: 0 };
+    }) : [];
     this.lastStand = { yellow: false, teal: false };
     this.pingNext = { yellow: 0, teal: 0 };
     this.lastStandT = { yellow: 0, teal: 0 };
@@ -299,6 +320,11 @@ export class Sim {
   }
 
   timeUp() {
+    if (this.mode === 'ctf') {
+      this.emit({ type: 'timeUp', ctf: true });
+      this.endRound('draw');
+      return;
+    }
     const hearts = { yellow: 0, teal: 0 };
     for (const e of this.entities) if (e.alive) hearts[e.team] += e.hearts;
     this.emit({ type: 'timeUp', hearts });
@@ -321,15 +347,20 @@ export class Sim {
         this.updateEntities(dt, false);
         if (this.phaseT <= 0) {
           this.phase = 'play';
-          this.phaseT = GAME.roundTime;
+          this.phaseT = this.roundTime();
           this.emit({ type: 'fight' });
         }
         return;
       case 'play':
         this.phaseT -= dt;
         this.updateEntities(dt, true);
-        this.updateLastStand(dt);
-        if (this.phase === 'play') this.checkRoundEnd();
+        if (this.mode === 'ctf') {
+          this.updateRespawns(dt);
+          this.updateFlags(dt);
+        } else {
+          this.updateLastStand(dt);
+          if (this.phase === 'play') this.checkRoundEnd();
+        }
         if (this.phase === 'play' && this.phaseT <= 0) this.timeUp();
         return;
       case 'roundEnd':
@@ -371,7 +402,7 @@ export class Sim {
         e.yaw = inp.yaw;
         e.pitch = inp.pitch;
         const mvInput = active ? inp : { ...emptyInput(), crouch: inp.crouch };
-        const mv = stepMovement(e, def, mvInput, dt, this.solids, e.towerId);
+        const mv = stepMovement(e, def, mvInput, dt, this.solids, e.towerId, this.map.bounds);
         if (mv.poundLanded) this.tryCollapse(e, mv.poundLanded);
         if (mv.landed > 9) this.emit({ type: 'land', id: e.id, x: e.pos.x, y: e.pos.y, z: e.pos.z });
       }
@@ -593,6 +624,10 @@ export class Sim {
       const t = this.towers.find((tt) => tt.id === o.towerId);
       if (t) this.removeTower(t, 'break');
     }
+    if (this.mode === 'ctf') {
+      o.respawnT = GAME.respawnTime;
+      this.dropFlag(o);
+    }
   }
 
   trySteal(e, def) {
@@ -638,7 +673,8 @@ export class Sim {
       const t = { id: this.nextId++, owner: e.id, team: e.team, x, y, z, size: def.towerSize, height: def.towerHeight, hp: def.towerHp, maxHp: def.towerHp };
       const b = towerBox(t);
       const s = def.towerSize / 2 - 0.02;
-      if (x - s < -29.8 || x + s > 29.8 || z - s < -19.8 || z + s > 19.8) continue;
+      const B = this.map.bounds;
+      if (x - s < B.minX + 0.2 || x + s > B.maxX - 0.2 || z - s < B.minZ + 0.2 || z + s > B.maxZ - 0.2) continue;
       if (this.solids.some((o) => overlapsBox(x, y + 0.02, z, s, def.towerHeight - 0.04, o))) continue;
       if (this.entities.some((o) => o.alive && overlapsBox(o.pos.x, o.pos.y, o.pos.z, CHARACTERS[o.char].radius, CHARACTERS[o.char].height, b))) continue;
       this.towers.push(t);
@@ -813,6 +849,87 @@ export class Sim {
     }
   }
 
+  // ---------- Capture the treasure ----------
+
+  // The dead come back respawnTime s after dying, at a free spot in their base
+  updateRespawns(dt) {
+    for (const e of this.entities) {
+      if (e.alive) continue;
+      if (!e.pick && e.isBot) e.pick = [e.lastChar, ...CHARACTER_ORDER].find((c) => c && this.canPick(e, c));
+      if (!e.pick) continue; // a human who joined mid-round picks first
+      e.respawnT = Math.max(0, e.respawnT - dt);
+      if (e.respawnT > 0) continue;
+      this.spawn(e, this.freeSpawn(e.team));
+      this.emit({ type: 'respawn', id: e.id });
+    }
+  }
+
+  freeSpawn(team) {
+    const list = this.map.spawns[team];
+    const free = list.filter((sp) => !this.entities.some((o) => o.alive && Math.hypot(o.pos.x - sp.x, o.pos.z - sp.z) < 0.9));
+    const pool = free.length ? free : list;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  carriedFlag(e) { return this.flags.find((f) => f.carrier === e.id) || null; }
+
+  dropFlag(e) {
+    const f = this.carriedFlag(e);
+    if (!f) return;
+    f.state = 'dropped';
+    f.carrier = null;
+    f.x = e.pos.x; f.z = e.pos.z;
+    f.y = this.supportHeight(e.pos.x, e.pos.z, e.pos.y);
+    f.dropT = GAME.flagReturnTime;
+    this.emit({ type: 'flagDrop', team: f.team, id: e.id, x: f.x, y: f.y, z: f.z });
+  }
+
+  returnFlag(f, by) {
+    f.state = 'home';
+    f.carrier = null;
+    f.x = f.home.x; f.y = f.home.y; f.z = f.home.z;
+    f.dropT = 0;
+    this.emit({ type: 'flagReturn', team: f.team, id: by ? by.id : null, x: f.x, y: f.y, z: f.z });
+  }
+
+  // Enemies pick a treasure up by walking over it; teammates return a dropped one.
+  // Carrying the enemy treasure into your own base wins the round.
+  updateFlags(dt) {
+    for (const f of this.flags) {
+      if (f.state === 'carried') {
+        const c = this.get(f.carrier);
+        if (!c || !c.alive) { if (c) this.dropFlag(c); else this.returnFlag(f, null); continue; }
+        f.x = c.pos.x; f.y = c.pos.y; f.z = c.pos.z;
+        if (c.char === 'spy') c.flickerT = Math.max(c.flickerT, 0.15); // the glittering gems give him away
+        const home = this.map.homes[c.team];
+        if (Math.hypot(c.pos.x - home.x, c.pos.z - home.z) <= GAME.captureRadius && Math.abs(c.pos.y - home.y) < 2) {
+          c.captures++;
+          this.emit({ type: 'flagCapture', team: c.team, flag: f.team, id: c.id, x: home.x, y: home.y, z: home.z });
+          this.endRound(c.team);
+          return;
+        }
+        continue;
+      }
+      if (f.state === 'dropped') {
+        f.dropT -= dt;
+        if (f.dropT <= 0) { this.returnFlag(f, null); continue; }
+      }
+      for (const o of this.entities) {
+        if (!o.alive) continue;
+        if (Math.hypot(o.pos.x - f.x, o.pos.z - f.z) > GAME.flagPickupRadius || Math.abs(o.pos.y - f.y) > 1.6) continue;
+        if (o.team !== f.team) {
+          if (this.carriedFlag(o)) continue;
+          f.state = 'carried';
+          f.carrier = o.id;
+          f.dropT = 0;
+          this.emit({ type: 'flagTake', team: f.team, id: o.id, x: f.x, y: f.y + 1, z: f.z });
+          break;
+        }
+        if (f.state === 'dropped') { this.returnFlag(f, o); break; }
+      }
+    }
+  }
+
   splash(p) {
     const def = CHARACTERS.doctor;
     const owner = this.get(p.owner);
@@ -920,6 +1037,8 @@ export class Sim {
   snapshot() {
     return {
       phase: this.phase, phaseT: r2(this.phaseT), round: this.round, lastStandT: this.lastStand ? this.lastStandT : null,
+      mapId: this.mapId, mode: this.mode,
+      flags: this.flags.map((f) => ({ team: f.team, state: f.state, carrier: f.carrier, x: r2(f.x), y: r2(f.y), z: r2(f.z), dropT: r2(f.dropT) })),
       lastStand: this.lastStand || null,
       score: this.score, winner: this.winner, matchWinner: this.matchWinner,
       teamSize: this.teamSize, difficulty: this.difficulty,
@@ -934,6 +1053,7 @@ export class Sim {
         flashlight: e.flashlight, flickerT: r2(e.flickerT), revealed: e.revealed,
         attackSeq: e.attackSeq, spawnSeq: e.spawnSeq, kills: e.kills, deaths: e.deaths, heals: e.heals,
         towerId: e.towerId, lastHurtT: r2(e.lastHurtT), cloakT: r2(e.cloakT), onTower: e.onTower,
+        respawnT: r2(e.respawnT), captures: e.captures,
       })),
       towers: this.towers.map((t) => ({ ...t })),
       projectiles: this.projectiles.map((p) => ({ id: p.id, type: p.type, team: p.team, x: r2(p.x), y: r2(p.y), z: r2(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz) })),

@@ -13,7 +13,10 @@ const port = 9333 + Math.floor(Math.random() * 500);
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'fp-chrome-'));
 const chrome = spawn(CHROME, [
   '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
-  '--window-size=1280,720', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--autoplay-policy=no-user-gesture-required',
+  '--window-size=1280,720', '--autoplay-policy=no-user-gesture-required',
+  // GPU=1 renders on the real graphics card (for benchmarks); default is software rendering
+  ...(process.env.GPU ? ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--disable-frame-rate-limit']
+    : ['--enable-unsafe-swiftshader', '--use-angle=swiftshader']),
   'about:blank',
 ], { stdio: 'ignore' });
 
