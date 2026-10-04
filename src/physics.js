@@ -57,7 +57,6 @@ export function stepMovement(e, def, input, dt, solids, ownTowerId) {
   let wz = f.z * input.fwd + rz * input.right;
   const wl = Math.hypot(wx, wz);
   if (wl > 1) { wx /= wl; wz /= wl; }
-  const moving = wl > 0.1;
 
   if (e.onGround) {
     e.vel.x = wx * speed;
@@ -83,9 +82,6 @@ export function stepMovement(e, def, input, dt, solids, ownTowerId) {
     } else if (input.jumpPressed && e.jumpsUsed < maxJumps && def.doubleJump) {
       e.vel.y = GAME.jumpSpeed * 0.95; e.jumpsUsed = Math.max(e.jumpsUsed, 1) + 1; out.jumped = true;
     }
-  } else if (def.hops && e.onGround && moving) {
-    // Doctor moves in hops; a hop does not use up a jump
-    e.vel.y = def.hopSpeed; e.onGround = false; e.jumpsUsed = 0;
   }
 
   // Gravity

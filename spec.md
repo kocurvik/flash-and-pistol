@@ -31,7 +31,7 @@ Each character has one primary weapon, one backup weapon and one special. All nu
 | --- | --- | --- | --- | --- | --- | --- |
 | Longman | Tank | 6 | 4.0 | Machete | Dagger | Medkit, flashlight |
 | Builder | Area control | 4 | 5.5 | Wrench | Fists *(assumption)* | Collapsing tower |
-| Doctor | Healer | 4 | 7.2 (hops) | Axe | Bird-leg kick *(assumption)* | Healing bottle |
+| Doctor | Healer | 4 | 7.2 | Axe | Kick *(assumption)* | Healing bottle |
 | Spy | Thief / assassin | 3 | 6.5 | Fists | none | Invisibility, steal weapon |
 
 ### Longman
@@ -53,12 +53,12 @@ The Builder controls space with towers that turn into traps.
 
 ### Doctor
 
-A robot doctor who hops around on the leg of a dead bird. Healing is its main job.
+A robot doctor on two regular legs. Healing is its main job.
 
-- **Movement:** moves in hops and has a double jump, so it is hard to hit and good at reaching teammates.
+- **Movement:** walks and runs normally (no hopping), is the fastest character and has a double jump, so it is good at reaching teammates.
 - **Axe (primary):** hitting a teammate heals them 1 heart. Hitting an enemy removes 1 heart. 0.7 s between swings.
 - **Healing bottle:** thrown like a grenade. On impact it splashes and heals all teammates within 2.5 m by 2 hearts (the Doctor too). Recharges after 15 s.
-- **Bird-leg kick (backup):** 1 heart damage, used if the axe is stolen. The bottle still works.
+- **Kick (backup):** 1 heart damage, used if the axe is stolen. The bottle still works.
 - Heals cannot go above a character's max hearts.
 
 ### Spy
@@ -78,7 +78,7 @@ Every character beats one other and loses to another, so no single pick is alway
 | Character | Strong against | Weak against | Why |
 | --- | --- | --- | --- |
 | Longman | Spy | Builder | Flashlight reveals Spies and 6 hearts outlast his punches; but he is too slow to escape a tower collapse. |
-| Builder | Longman, groups | Doctor, Spy | Tower collapses punish slow or clustered enemies; a hopping Doctor dodges, and a Spy can steal the wrench. |
+| Builder | Longman, groups | Doctor, Spy | Tower collapses punish slow or clustered enemies; a fast, double-jumping Doctor dodges, and a Spy can steal the wrench. |
 | Doctor | Builder, long fights | Spy | Healing wins drawn-out fights; but 4 hearts and a predictable heal target make it a Spy's favorite victim. |
 | Spy | Doctor, Builder | Longman | Invisible thief who cripples key players; only 3 hearts, so one good machete hit nearly kills him. |
 
@@ -89,8 +89,8 @@ Every character beats one other and loses to another, so no single pick is alway
 
 One symmetric arena about 60 × 40 m, built from simple boxes *(assumption)*.
 
-- **Layout:** Yellow base at one end, Teal base at the other, an open middle field, and two side corridors. Crates and pillars give cover. A raised walkway in the middle rewards Doctor hops and Builder towers.
-- **Look:** flat colors, no textures. Characters are built from boxes and cylinders, tinted yellow or teal. Each character has a clear shape: Longman tall and thin, Builder wide, Doctor with one bird leg, Spy small.
+- **Layout:** Yellow base at one end, Teal base at the other, an open middle field, and two side corridors. Crates and pillars give cover. A raised walkway in the middle rewards Doctor double jumps and Builder towers.
+- **Look:** flat colors, no textures. Characters are built from boxes and cylinders, tinted yellow or teal. Each character has a clear shape: Longman tall and thin, Builder wide, Doctor a metal robot, Spy small.
 
 | Action | Key |
 | --- | --- |

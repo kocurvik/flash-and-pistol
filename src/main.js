@@ -53,8 +53,7 @@ const G = {
 };
 
 renderer.onStep = (e) => {
-  if (e.char === 'doctor') audio.play('hop', e.pos, 0.6);
-  else audio.play('step', e.pos, e.char === 'spy' ? 0.3 : 0.7);
+  audio.play('step', e.pos, e.char === 'spy' ? 0.3 : 0.7);
 };
 
 const getMe = () => (G.view ? G.view.get(G.localId) : null);

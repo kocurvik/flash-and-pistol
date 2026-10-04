@@ -11,7 +11,7 @@ import { CHARACTERS, TEAM_COLORS, WEAPONS, GAME } from './config.js';
 import { lookDir } from './physics.js';
 import {
   buildWeapon, buildCharacter, buildViewArm, buildTower, buildArena, buildClouds,
-  boxGeo, mat, ORANGE,
+  boxGeo, mat,
 } from './models.js';
 
 // Graphics presets: post-processing, shadow resolution and render resolution
@@ -290,8 +290,7 @@ export class Renderer {
       m.walk += m.speed * dt * 2.6;
       const sw = Math.sin(m.walk) * Math.min(1, m.speed / 3) * 0.7;
       if (P.legL) P.legL.rotation.x = sw;
-      if (P.legR && e.char !== 'doctor') P.legR.rotation.x = -sw;
-      if (e.char === 'doctor') P.legR.rotation.x = e.onGround ? 0 : -0.35;
+      if (P.legR) P.legR.rotation.x = -sw;
       if (P.armL) P.armL.rotation.x = e.climbing ? 2.6 - Math.sin(opts.time * 10) * 0.3 : -sw * 0.6;
       if (e.char === 'longman' && e.flashlight && P.armL) P.armL.rotation.x = 1.4 + e.pitch;
       // Footsteps (spies are quiet but audible)
@@ -502,7 +501,7 @@ export class Renderer {
       holder.add(buildViewArm(e.char, e.team));
       holder.add(buildWeapon(e.weapon));
       if (e.weapon === 'kick') {
-        const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.5, 4, 8), mat(ORANGE, 'rubber'));
+        const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.5, 4, 8), mat(0x8a929c, 'metal'));
         leg.rotation.x = Math.PI / 2;
         leg.position.set(-0.1, -0.15, -0.2);
         leg.visible = false;

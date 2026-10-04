@@ -133,7 +133,6 @@ export class Audio {
         break;
       case 'click': this.tone(o, { type: 'square', f0: 1200, f1: 800, t: 0.03, vol: 0.12 }); break;
       case 'step': this.noise(o, { t: 0.05, vol: 0.25, type: 'lowpass', f0: 700 }); break;
-      case 'hop': this.tone(o, { f0: 250, f1: 500, t: 0.1, vol: 0.12 }); break;
       case 'land': this.noise(o, { t: 0.15, vol: 0.5, type: 'lowpass', f0: 400 }); break;
       case 'fail': this.tone(o, { type: 'square', f0: 140, t: 0.12, vol: 0.12 }); break;
       case 'beep': this.tone(o, { type: 'square', f0: 660, t: 0.12, vol: 0.15 }); break;

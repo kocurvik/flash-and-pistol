@@ -8,7 +8,7 @@ export const WEAPONS = {
   wrench:  { name: 'Wrench',  damage: 2, cooldown: 1.2, range: 2.0, kind: 'spin', anim: 'spin' },
   fists:   { name: 'Fists',   damage: 1, cooldown: 0.5, range: 1.8, arc: 40, kind: 'cone', anim: 'punch' },
   axe:     { name: 'Axe',     damage: 1, heal: 1, cooldown: 0.7, range: 2.3, arc: 40, kind: 'cone', anim: 'swing' },
-  kick:    { name: 'Bird-leg kick', damage: 1, cooldown: 0.6, range: 2.0, arc: 40, kind: 'cone', anim: 'kick' },
+  kick:    { name: 'Kick', damage: 1, cooldown: 0.6, range: 2.0, arc: 40, kind: 'cone', anim: 'kick' },
   knife:   { name: 'Knife',   damage: 1, backstab: 2, cooldown: 0.5, range: 1.9, arc: 40, kind: 'cone', anim: 'stab' },
   // Builder's tower gun: only usable while standing on top of his own tower
   nailgun: { name: 'Nail gun', damage: 1, cooldown: 0.8, kind: 'gun', anim: 'shoot' },
@@ -38,9 +38,9 @@ export const CHARACTERS = {
     name: 'Doctor', role: 'Healer', hearts: 4, speed: 7.2,
     height: 1.7, radius: 0.4, eye: 1.5,
     primary: 'axe', backup: 'kick', special: 'bottle',
-    hops: true, doubleJump: true, hopSpeed: 4.6,
+    doubleJump: true,
     bottleHeal: 2, bottleRadius: 2.5, bottleCooldown: 15, bottleSpeed: 13,
-    blurb: 'Hops on a bird leg, double jump. Axe heals teammates. {special} throws a healing bottle.',
+    blurb: 'Fast, with a double jump. Axe heals teammates. {special} throws a healing bottle.',
   },
   spy: {
     name: 'Spy', role: 'Thief / assassin', hearts: 3, speed: 6.5,

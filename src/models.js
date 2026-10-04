@@ -7,7 +7,6 @@ import { TEAM_COLORS } from './config.js';
 
 export const SKIN = 0xe8c39e;
 export const METAL = 0xc3cad2;
-export const ORANGE = 0xe69a2e;
 const DARK = 0x2b2f38;
 
 // ---------- Materials ----------
@@ -245,29 +244,14 @@ export function buildCharacter(char, team) {
     for (const A of [P.armL, P.armR]) A.add(sph(0.1, 0xd9a441, 'cloth', 0, -0.6, 0));
     body.add(P.armL, P.armR);
   } else if (char === 'doctor') {
-    // Robot on a single bird leg
-    const leg = new THREE.Group();
-    leg.position.set(0, 0.92, 0);
-    const thigh = part(capsuleGeo(0.055, 0.38), mat(ORANGE, 'rubber'), 0, -0.22, 0.07);
-    thigh.rotation.x = -0.35;
-    leg.add(thigh);
-    leg.add(sph(0.06, 0xb5741f, 'rubber', 0, -0.44, 0.14));
-    const shin = part(capsuleGeo(0.038, 0.44), mat(ORANGE, 'rubber'), 0, -0.67, 0.08);
-    shin.rotation.x = 0.3;
-    leg.add(shin);
-    for (const a of [-0.55, 0, 0.55, Math.PI]) {
-      const toe = new THREE.Group();
-      toe.position.set(0, -0.9, 0.02);
-      toe.rotation.y = a;
-      const t = part(capsuleGeo(0.022, 0.16), mat(ORANGE, 'rubber'), 0, 0, -0.1);
-      t.rotation.x = Math.PI / 2;
-      toe.add(t);
-      toe.add(part(new THREE.ConeGeometry(0.02, 0.06, 8), mat(0x222222, 'glossy'), 0, -0.01, -0.21));
-      toe.children[1].rotation.x = -Math.PI / 2;
-      leg.add(toe);
+    // Robot on two metal legs
+    P.legL = limb(0.06, 0.88, 0x8a929c, 'metal', -0.12, 0.92, 0);
+    P.legR = limb(0.06, 0.88, 0x8a929c, 'metal', 0.12, 0.92, 0);
+    for (const L of [P.legL, P.legR]) {
+      L.add(sph(0.07, 0x555c66, 'metal', 0, -0.45, 0));
+      L.add(rb(0.15, 0.08, 0.26, 0x555c66, 'metal', 0, -0.88, -0.05, 0.03));
     }
-    P.legR = leg;
-    body.add(leg);
+    body.add(P.legL, P.legR);
     body.add(rb(0.26, 0.14, 0.26, 0x555c66, 'metal', 0, 0.88, 0));
     body.add(rb(0.58, 0.62, 0.46, METAL, 'metal', 0, 1.2, 0, 0.1));
     for (const sx of [-1, 1]) body.add(rb(0.18, 0.12, 0.42, tc, 'paint', sx * 0.3, 1.47, 0, 0.05));
