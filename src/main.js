@@ -479,7 +479,7 @@ function handleEvents(evs) {
         audio.play('steal', ev);
         renderer.spawnText('STOLEN!', '#ff9f43', ev.x, ev.y + 0.6, ev.z);
         if (ev.from === myId) hud.flashHint(`A Spy stole your ${WEAPONS[ev.weapon].name}! You are on your backup weapon.`, 3);
-        if (ev.id === myId) hud.flashHint(`You stole a ${WEAPONS[ev.weapon].name}! 1 = knife, 2 = stolen weapon.`, 3);
+        if (ev.id === myId) hud.flashHint(`You stole a ${WEAPONS[ev.weapon].name}! 1 = fists, 2 = stolen weapon.`, 3);
         if (thief && victim) hud.feed(`${hud.name(thief)} <span class="muted">stole</span> ${hud.name(victim)}<span class="muted">'s ${WEAPONS[ev.weapon].name}</span>`, ev.id === myId || ev.from === myId);
         break;
       }
@@ -609,7 +609,7 @@ function computeHint(view, me) {
       if (me.flickerT > 0) return '<b>You are visible!</b>';
       const next = Math.max(0, Math.ceil(def.cloakEvery - (me.cloakT || 0)));
       if (me.stolen && me.slot === 1) return `Invisible · flicker in ${next} s · ${K('weapon2')} uses the stolen ${WEAPONS[me.stolen].name}`;
-      return `Invisible · you flicker into view in ${next} s · ${K('special')} steals a weapon · stab from behind for 2♥`;
+      return `Invisible · you flicker into view in ${next} s · ${K('special')} steals a weapon · your fists only hit for 1♥`;
     }
     case 'longman':
       if (me.hearts <= me.maxHearts - 2 && me.specialCd <= 0) return `${K('special')}: Medkit (+2♥)`;

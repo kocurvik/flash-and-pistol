@@ -325,8 +325,8 @@ export class BotBrain {
       if (distXZ(e.pos, this.flankPoint) < 2.5 || distXZ(e.pos, T.pos) < 8) this.flankPoint = null;
       else { this.goal = this.flankPoint; return true; }
     }
-    // Weapon choice: a stolen machete/wrench hits harder than the knife from the front
-    const want = e.stolen && (e.stolen === 'machete' || e.stolen === 'wrench') ? 2 : 1;
+    // Weapon choice: any stolen weapon is at least as good as bare fists
+    const want = e.stolen ? 2 : 1;
     if (want !== e.slot) this.slot = want;
 
     const d = dist3(e.pos, T.pos);

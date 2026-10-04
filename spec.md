@@ -32,7 +32,7 @@ Each character has one primary weapon, one backup weapon and one special. All nu
 | Longman | Tank | 6 | 4.0 | Machete | Dagger | Medkit, flashlight |
 | Builder | Area control | 4 | 5.5 | Wrench | Fists *(assumption)* | Collapsing tower |
 | Doctor | Healer | 4 | 7.2 (hops) | Axe | Bird-leg kick *(assumption)* | Healing bottle |
-| Spy | Thief / assassin | 3 | 6.5 | Knife *(assumption)* | none | Invisibility, steal weapon |
+| Spy | Thief / assassin | 3 | 6.5 | Fists | none | Invisibility, steal weapon |
 
 ### Longman
 
@@ -67,8 +67,8 @@ Invisible for the whole game, but fragile. Strong when used cleverly, risky to p
 
 - **Invisibility:** always on. The Spy briefly flickers into view for 1 s after attacking or stealing, and Longman's flashlight reveals him *(assumptions for balance)*.
 - **Steal weapon:** at melee range, press the steal key on an enemy. Their primary weapon is taken for the rest of the round and they switch to their backup. It never takes the backup, as the designer specified. 8 s cooldown.
-- **Using stolen weapons:** the Spy can use the last weapon he stole instead of his knife *(assumption: makes stealing rewarding)*.
-- **Knife:** 1 heart damage, 0.5 s between stabs. A stab from behind does 2 hearts *(assumption)*.
+- **Using stolen weapons:** the Spy can use the last weapon he stole instead of his fists *(assumption: makes stealing rewarding)*.
+- **Fists:** the Spy starts with only his fists: 1 heart damage, 0.5 s between punches, no backstab bonus. Stealing is how he gets a real weapon.
 - Spies cannot steal from other Spies.
 
 ## Balance notes
@@ -77,7 +77,7 @@ Every character beats one other and loses to another, so no single pick is alway
 
 | Character | Strong against | Weak against | Why |
 | --- | --- | --- | --- |
-| Longman | Spy | Builder | Flashlight reveals Spies and 6 hearts survive a stab; but he is too slow to escape a tower collapse. |
+| Longman | Spy | Builder | Flashlight reveals Spies and 6 hearts outlast his punches; but he is too slow to escape a tower collapse. |
 | Builder | Longman, groups | Doctor, Spy | Tower collapses punish slow or clustered enemies; a hopping Doctor dodges, and a Spy can steal the wrench. |
 | Doctor | Builder, long fights | Spy | Healing wins drawn-out fights; but 4 hearts and a predictable heal target make it a Spy's favorite victim. |
 | Spy | Doctor, Builder | Longman | Invisible thief who cripples key players; only 3 hearts, so one good machete hit nearly kills him. |
@@ -123,7 +123,7 @@ Bots use a simple priority list checked about 5 times per second: they do the fi
 - **Longman bot:** uses the medkit at ≤ 3 hearts. Turns on the flashlight when hit by something it cannot see, and sweeps it around.
 - **Builder bot:** builds a tower near a waypoint enemies often pass. When 2 or more enemies are within 3 m of its tower, climbs up and collapses it.
 - **Doctor bot:** follows the most injured teammate and swings the axe at them until healed. Throws the bottle when 2 or more teammates are hurt and close together. Only fights when nobody needs healing.
-- **Spy bot:** sneaks around the side corridors toward the enemy Doctor or Builder, steals their weapon, then stabs from behind. Retreats from any lit flashlight.
+- **Spy bot:** sneaks around the side corridors toward the enemy Doctor or Builder, steals their weapon, then attacks from behind with it. Retreats from any lit flashlight.
 
 **Difficulty:** Easy, Normal and Hard change reaction delay (0.8 / 0.4 / 0.2 s), aim wobble and how often bots use specials. Bots cannot see an invisible Spy unless he is flickering or in a flashlight beam, the same as players.
 

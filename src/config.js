@@ -45,11 +45,11 @@ export const CHARACTERS = {
   spy: {
     name: 'Spy', role: 'Thief / assassin', hearts: 3, speed: 6.5,
     height: 1.45, radius: 0.35, eye: 1.3,
-    primary: 'knife', backup: null, special: 'steal',
+    primary: 'fists', backup: null, special: 'steal',
     stealRange: 2.2, stealCooldown: 8, flickerTime: 1.0,
     // Unstable cloak: the Spy flickers visible for cloakFlicker s every cloakEvery s, all round
     cloakEvery: 3, cloakFlicker: 0.5,
-    blurb: 'Invisible, but flickers into view for 0.5 s every 3 s. {special} steals an enemy weapon. Backstabs do 2.',
+    blurb: 'Invisible, but flickers into view for 0.5 s every 3 s. Starts with only fists (1♥). {special} steals an enemy weapon to fight with.',
   },
 };
 
