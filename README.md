@@ -3,6 +3,11 @@
 A tiny 3D first-person team brawler for the browser: Yellow vs Teal, four characters
 (Longman, Builder, Doctor, Spy), best of 5 rounds, two maps. Design: [spec.md](spec.md).
 
+## Play in the browser
+
+**[kocurvik.github.io/flash-and-pistol](https://kocurvik.github.io/flash-and-pistol/)**: nothing to
+install; click **Play vs Bots**. Playing with friends needs the local server below.
+
 ## Play
 
 **Double-click `play.bat`** (Windows) or run `./play.sh` / `npm start` (macOS, Linux).
