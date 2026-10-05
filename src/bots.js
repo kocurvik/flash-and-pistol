@@ -1,7 +1,7 @@
 // Bot AI: a priority list checked ~5 times per second (think), and smooth
 // steering every tick (steer) that turns decisions into the same input a human makes.
 import { CHARACTERS, WEAPONS, DIFFICULTY, GAME } from './config.js';
-import { nearestNode, findPath, yawTo, angleDiff, forwardVec, lineClear } from './physics.js';
+import { nearestNode, findPath, yawTo, angleDiff, forwardVec, lineClear, groundAt, groundAlong } from './physics.js';
 
 const DEG = Math.PI / 180;
 const distXZ = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -311,9 +311,10 @@ export class BotBrain {
     const side = e.team === 'yellow' ? -1 : 1;
     // Capture the treasure: guard our treasure; otherwise cover the middle of our half
     const home = sim.mode === 'ctf' ? sim.map.homes[e.team] : null;
+    const [x0, x1] = sim.map.buildX || [2, 13];
     const cands = home
       ? sim.nav.nodes.filter((n) => n.y === 0 && distXZ(n, home) > 4 && distXZ(n, home) < 9)
-      : sim.nav.nodes.filter((n) => n.y === 0 && n.x * side > 2 && n.x * side < 13 && Math.abs(n.z) < 11);
+      : sim.nav.nodes.filter((n) => n.y === 0 && n.x * side > x0 && n.x * side < x1 && Math.abs(n.z) < 11);
     return cands[Math.floor(Math.random() * cands.length)] || { x: e.pos.x, y: 0, z: e.pos.z };
   }
 
@@ -445,6 +446,13 @@ export class BotBrain {
         if (l > 0.35) { mx = dx / l; mz = dz / l; }
       }
     }
+    // Over a void: never step off an edge (in the air too, so a jump can't carry us out)
+    const edgeAhead = (x, z) => {
+      if (!sim.map.bounds.void || !(x || z)) return false;
+      const l = Math.hypot(x, z), ahead = CHARACTERS[e.char].radius + 0.35;
+      return !groundAt(e.pos.x + x / l * ahead, e.pos.z + z / l * ahead, e.pos.y, sim.solids, 3);
+    };
+    if (edgeAhead(mx, mz)) { mx = 0; mz = 0; } // held back by the edge: not stuck
     // Unstick: strafe and jump if we haven't moved for a while
     if (mx || mz) {
       this.stuckT += dt;
@@ -464,6 +472,7 @@ export class BotBrain {
       const sx = -mz * this.strafe, sz = mx * this.strafe;
       mx = mx * 0.3 + sx; mz = mz * 0.3 + sz;
     }
+    if (edgeAhead(mx, mz)) { mx = 0; mz = 0; }
 
     // Facing
     const eye = sim.eye(e);
@@ -522,7 +531,8 @@ export class BotBrain {
     const goal = this.goal;
     const eye = { x: e.pos.x, y: e.pos.y + 0.8, z: e.pos.z };
     const g = { x: goal.x, y: (goal.y || 0) + 0.8, z: goal.z };
-    if (distXZ(e.pos, goal) < 6 && Math.abs((goal.y || 0) - e.pos.y) < 1.2 && lineClear(eye, g, sim.solids)) {
+    if (distXZ(e.pos, goal) < 6 && Math.abs((goal.y || 0) - e.pos.y) < 1.2 && lineClear(eye, g, sim.solids) &&
+      (!sim.map.bounds.void || groundAlong(e.pos, goal, sim.solids))) {
       this.path = [];
       return goal;
     }

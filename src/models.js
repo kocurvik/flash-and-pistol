@@ -539,47 +539,50 @@ export function buildArena(scene, map) {
 
   // Crate edge frames for every crate in one instanced mesh
   const frames = [];
-  for (const b of map.boxes) {
-    const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
-    const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, cz = (b.min[2] + b.max[2]) / 2;
-    const add = (m) => { m.receiveShadow = true; statics.add(m); return m; };
-    const rb = (w, h, d, color, kind, x, y, z, r) => part(rboxGeo(w, h, d, r, 1), mat(color, kind), x, y, z);
-    switch (b.kind) {
-      case 'crate':
-        addCrate(b, add, frames);
-        break;
-      case 'pillar':
-        add(rb(w * 0.85, h, d * 0.85, b.color, 'stone', cx, cy, cz, 0.05));
-        add(rb(w * 1.15, 0.3, d * 1.15, shade(b.color, 0.8), 'stone', cx, b.min[1] + 0.15, cz, 0.04));
-        add(rb(w * 1.15, 0.22, d * 1.15, shade(b.color, 1.12), 'stone', cx, b.max[1] - 0.11, cz, 0.04));
-        break;
-      case 'walkway':
-      case 'step': {
-        add(rb(w, h, d, shade(b.color, 0.85), 'metal', cx, cy, cz, 0.03));
-        add(part(boxGeo(w - 0.06, 0.04, d - 0.06), mat(b.color, { rough: 0.6, metal: 0.5 }), cx, b.max[1] + 0.005, cz));
-        if (b.kind === 'walkway') {
-          // Hazard stripes along the long edges
-          for (const sz of [-1, 1]) {
-            for (let x = b.min[0] + 0.2; x < b.max[0] - 0.2; x += 0.8) {
-              const st = part(boxGeo(0.35, 0.06, 0.12), mat(0xf2c418, 'paint'), x + 0.2, b.max[1] + 0.01, cz + sz * (d / 2 - 0.08), false);
-              st.rotation.y = 0.6;
-              add(st);
-            }
-          }
-        }
-        break;
-      }
-      default: // walls: body with a darker base and a lighter cap
-        add(rb(w, h, d, b.color, 'stone', cx, cy, cz, 0.04));
-        add(rb(w + 0.08, Math.min(0.25, h * 0.25), d + 0.08, shade(b.color, 0.72), 'stone', cx, b.min[1] + Math.min(0.125, h * 0.125), cz, 0.03));
-        add(rb(w + 0.14, 0.14, d + 0.14, shade(b.color, 1.1), 'stone', cx, b.max[1] - 0.02, cz, 0.04));
-    }
-  }
+  for (const b of map.boxes) addArenaBox(b, statics, frames);
   addCrateFrames(scene, frames);
   addBanners(statics, map);
   scene.add(mergeGroup(statics));
 
   buildScenery(scene);
+}
+
+// Crates, pillars, walkways and walls of the outdoor maps, added to statics
+function addArenaBox(b, statics, frames) {
+  const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
+  const cx = (b.min[0] + b.max[0]) / 2, cy = (b.min[1] + b.max[1]) / 2, cz = (b.min[2] + b.max[2]) / 2;
+  const add = (m) => { m.receiveShadow = true; statics.add(m); return m; };
+  const rb = (w, h, d, color, kind, x, y, z, r) => part(rboxGeo(w, h, d, r, 1), mat(color, kind), x, y, z);
+  switch (b.kind) {
+    case 'crate':
+      addCrate(b, add, frames);
+      break;
+    case 'pillar':
+      add(rb(w * 0.85, h, d * 0.85, b.color, 'stone', cx, cy, cz, 0.05));
+      add(rb(w * 1.15, 0.3, d * 1.15, shade(b.color, 0.8), 'stone', cx, b.min[1] + 0.15, cz, 0.04));
+      add(rb(w * 1.15, 0.22, d * 1.15, shade(b.color, 1.12), 'stone', cx, b.max[1] - 0.11, cz, 0.04));
+      break;
+    case 'walkway':
+    case 'step': {
+      add(rb(w, h, d, shade(b.color, 0.85), 'metal', cx, cy, cz, 0.03));
+      add(part(boxGeo(w - 0.06, 0.04, d - 0.06), mat(b.color, { rough: 0.6, metal: 0.5 }), cx, b.max[1] + 0.005, cz));
+      if (b.kind === 'walkway') {
+        // Hazard stripes along the long edges
+        for (const sz of [-1, 1]) {
+          for (let x = b.min[0] + 0.2; x < b.max[0] - 0.2; x += 0.8) {
+            const st = part(boxGeo(0.35, 0.06, 0.12), mat(0xf2c418, 'paint'), x + 0.2, b.max[1] + 0.01, cz + sz * (d / 2 - 0.08), false);
+            st.rotation.y = 0.6;
+            add(st);
+          }
+        }
+      }
+      break;
+    }
+    default: // walls: body with a darker base and a lighter cap
+      add(rb(w, h, d, b.color, 'stone', cx, cy, cz, 0.04));
+      add(rb(w + 0.08, Math.min(0.25, h * 0.25), d + 0.08, shade(b.color, 0.72), 'stone', cx, b.min[1] + Math.min(0.125, h * 0.125), cz, 0.03));
+      add(rb(w + 0.14, 0.14, d + 0.14, shade(b.color, 1.1), 'stone', cx, b.max[1] - 0.02, cz, 0.04));
+  }
 }
 
 // Wooden crate with an edge frame (collected in `frames`) and a diagonal plank
@@ -884,10 +887,114 @@ export function buildGems(team) {
   return mergeGroup(g);
 }
 
+// ---------- Sky Bridge ----------
+
+// Floating islands (grass tops, dirt sides, rocky undersides), the plank bridge,
+// distant islets and a layer of clouds below
+export function buildIslands(scene, map) {
+  const statics = new THREE.Group();
+  const frames = [];
+  let seed = 23;
+  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const add = (m) => { m.receiveShadow = true; statics.add(m); return m; };
+  const rockMat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true });
+  const islands = map.boxes.filter((b) => b.kind === 'island');
+  const floors = map.decor.filter((d) => d.kind === 'floor');
+  const inIsland = (x, z) => islands.some((b) => x > b.min[0] && x < b.max[0] && z > b.min[2] && z < b.max[2]);
+
+  // Grass tiles on a 2 m grid (island edges sit on even coordinates)
+  const pos = [], col = [], idx = [];
+  let v = 0;
+  const B = map.bounds;
+  for (let x = B.minX; x < B.maxX; x += 2) {
+    for (let z = B.minZ; z < B.maxZ; z += 2) {
+      if (!inIsland(x + 1, z + 1)) continue;
+      const odd = (x / 2 + z / 2) & 1;
+      let base = odd ? 0x8fbf6a : 0x88b864;
+      const fl = floors.find((d) => x + 1 > d.min[0] && x + 1 < d.max[0] && z + 1 > d.min[2] && z + 1 < d.max[2]);
+      if (fl) base = fl.team === 'yellow' ? (odd ? 0xd9c784 : 0xd2bf7a) : (odd ? 0x86c9bf : 0x7ec2b8);
+      const c = new THREE.Color(base).multiplyScalar(0.94 + rand() * 0.1);
+      const g = 0.04;
+      pos.push(x + g, 0, z + g, x + 2 - g, 0, z + g, x + 2 - g, 0, z + 2 - g, x + g, 0, z + 2 - g);
+      for (let k = 0; k < 4; k++) col.push(c.r, c.g, c.b);
+      idx.push(v, v + 2, v + 1, v, v + 3, v + 2);
+      v += 4;
+    }
+  }
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  fg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  fg.setIndex(idx);
+  fg.computeVertexNormals();
+  const floor = new THREE.Mesh(fg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  floor.position.y = 0.002;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // An upside-down rocky pyramid under a w x d footprint
+  const underside = (cx, top, cz, w, d, depth, color) => {
+    const m = add(part(new THREE.ConeGeometry(1, 1, 4), rockMat(color), cx, top - depth / 2, cz));
+    m.rotation.set(Math.PI, Math.PI / 4, 0);
+    m.scale.set(w * 0.72, depth, d * 0.72);
+    return m;
+  };
+
+  for (const b of map.boxes) {
+    const w = b.max[0] - b.min[0], h = b.max[1] - b.min[1], d = b.max[2] - b.min[2];
+    const cx = (b.min[0] + b.max[0]) / 2, cz = (b.min[2] + b.max[2]) / 2;
+    switch (b.kind) {
+      case 'island': {
+        // Grass lip over a dirt body (the grout between tiles shows the lip color)
+        add(part(boxGeo(w, 0.3, d), mat(0x6e9a4c, 'stone'), cx, -0.15, cz));
+        add(part(boxGeo(w, h - 0.3, d), mat(b.color, 'stone'), cx, b.min[1] + (h - 0.3) / 2, cz));
+        underside(cx, b.min[1], cz, w, d, Math.min(w, d) * 0.7, 0x6a5a48);
+        // Rocks hanging off the underside
+        for (let i = 0; i < Math.round(w * d / 25); i++) {
+          const r = 0.5 + rand() * 1.1;
+          const x = b.min[0] + w * (0.2 + rand() * 0.6), z = b.min[2] + d * (0.2 + rand() * 0.6);
+          const m = add(part(new THREE.IcosahedronGeometry(1, 0), rockMat(rand() < 0.5 ? 0x5e5042 : 0x705f4c), x, b.min[1] - 0.3 - rand() * 2, z));
+          m.scale.set(r, r * 1.4, r);
+          m.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+        }
+        break;
+      }
+      case 'bridge': {
+        // Planks across the deck, two beams underneath
+        for (let x = b.min[0]; x < b.max[0] - 0.01; x += 0.5) {
+          const c = shade(b.color, 0.86 + rand() * 0.2);
+          add(part(boxGeo(0.45, 0.12, d), mat(c, 'wood'), x + 0.25, b.max[1] - 0.06, cz));
+        }
+        for (const sz of [-1, 1]) add(part(boxGeo(w, 0.2, 0.18), mat(0x5c3a1a, 'wood'), cx, b.max[1] - 0.22, cz + sz * (d / 2 - 0.2)));
+        break;
+      }
+      case 'post':
+        add(part(cylGeo(0.12, 0.14, h), mat(b.color, 'wood'), cx, b.min[1] + h / 2, cz));
+        add(part(sphereGeo(0.15), mat(shade(b.color, 0.8), 'wood'), cx, b.max[1], cz));
+        break;
+      default:
+        addArenaBox(b, statics, frames);
+    }
+  }
+
+  // Distant islets drifting in the sky
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rand() * 0.5;
+    const r = 75 + rand() * 70, s = 4 + rand() * 7;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r, y = -20 + rand() * 45;
+    add(part(boxGeo(s * 2, 0.6, s * 1.6), mat(0x7fae5c, 'stone'), x, y - 0.3, z));
+    underside(x, y - 0.6, z, s * 2, s * 1.6, s * 1.4, 0x6a5a48);
+  }
+
+  addCrateFrames(scene, frames);
+  scene.add(mergeGroup(statics));
+  buildSky(scene, 0x3d6f9e);
+  buildClouds(scene, { y: -55, seed: 29 });
+}
+
 // ---------- Sky and scenery outside the walls ----------
 
-function buildScenery(scene) {
-  // Gradient sky dome with a soft sun glow
+// Gradient sky dome with a soft sun glow; bottom: the color below the horizon
+function buildSky(scene, bottom) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(450, 32, 16), new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -895,7 +1002,7 @@ function buildScenery(scene) {
     uniforms: {
       top: { value: new THREE.Color(0x3f8fd8) },
       horizon: { value: new THREE.Color(0xcfe8f7) },
-      bottom: { value: new THREE.Color(0x9cc28a) },
+      bottom: { value: new THREE.Color(bottom) },
       sunDir: { value: new THREE.Vector3(25, 45, 15).normalize() },
     },
     vertexShader: `varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -913,6 +1020,10 @@ function buildScenery(scene) {
   }));
   sky.renderOrder = -1;
   scene.add(sky);
+}
+
+function buildScenery(scene) {
+  buildSky(scene, 0x9cc28a);
 
   // Rolling hills
   const hills = new THREE.Group();
@@ -955,11 +1066,11 @@ function buildScenery(scene) {
   scene.add(trunk, crown);
 }
 
-// Puffy clouds made of flattened spheres; returned so they can drift
-export function buildClouds(scene) {
+// Puffy clouds made of flattened spheres; returned so they can drift.
+// y: lowest cloud height (they spread 30 m above it)
+export function buildClouds(scene, { y = 55, seed = 11 } = {}) {
   const group = new THREE.Group();
   const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, emissive: 0xffffff, emissiveIntensity: 0.35 });
-  let seed = 11;
   const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   for (let i = 0; i < 14; i++) {
     const c = new THREE.Group();
@@ -971,7 +1082,7 @@ export function buildClouds(scene) {
       c.add(p);
     }
     const a = rand() * Math.PI * 2, r = 80 + rand() * 120;
-    c.position.set(Math.cos(a) * r, 55 + rand() * 30, Math.sin(a) * r);
+    c.position.set(Math.cos(a) * r, y + rand() * 30, Math.sin(a) * r);
     c.rotation.y = rand() * Math.PI;
     group.add(c);
   }

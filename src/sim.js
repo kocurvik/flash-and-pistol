@@ -406,6 +406,7 @@ export class Sim {
         if (mv.poundLanded) this.tryCollapse(e, mv.poundLanded);
         if (mv.landed > 9) this.emit({ type: 'land', id: e.id, x: e.pos.x, y: e.pos.y, z: e.pos.z });
       }
+      if (this.map.killY !== undefined && e.pos.y < this.map.killY) { this.fallOut(e); continue; }
       this.updateTowerGun(e);
       if (active) this.doActions(e, def, inp, dt);
       if (active && def.cloakEvery) this.updateCloak(e, def, dt);
@@ -630,6 +631,12 @@ export class Sim {
     }
   }
 
+  // Fell into the void. Whoever hit them last, recently, gets the kill.
+  fallOut(e) {
+    const by = this.time - e.lastHurtT < 6 ? this.get(e.lastAttacker) : null;
+    this.kill(e, by, 'void');
+  }
+
   trySteal(e, def) {
     const t = this.coneTarget(e, def.stealRange, 50, (o) => o.team !== e.team && o.char !== 'spy' && o.hasPrimary);
     if (!t) { this.fail(e, 'No enemy weapon in reach'); return; }
@@ -657,8 +664,9 @@ export class Sim {
     this.solids = this.map.boxes.concat(this.towers.map(towerBox));
   }
 
+  // Height of the highest floor at (x, z) not above maxY; -Infinity over a void
   supportHeight(x, z, maxY) {
-    let y = 0;
+    let y = this.map.bounds.void ? -Infinity : 0;
     for (const b of this.map.boxes) {
       if (x >= b.min[0] && x <= b.max[0] && z >= b.min[2] && z <= b.max[2] && b.max[1] <= maxY + 0.05) y = Math.max(y, b.max[1]);
     }
@@ -670,6 +678,7 @@ export class Sim {
     for (const dist of [1.9, 2.5, 1.5, 3.0]) {
       const x = e.pos.x + f.x * dist, z = e.pos.z + f.z * dist;
       const y = this.supportHeight(x, z, e.pos.y);
+      if (y === -Infinity) continue;
       const t = { id: this.nextId++, owner: e.id, team: e.team, x, y, z, size: def.towerSize, height: def.towerHeight, hp: def.towerHp, maxHp: def.towerHp };
       const b = towerBox(t);
       const s = def.towerSize / 2 - 0.02;
@@ -731,7 +740,8 @@ export class Sim {
       let hit = false, victim = null;
       for (let s = 0; s < steps && !hit; s++) {
         p.x += p.vx * dt / steps; p.y += p.vy * dt / steps; p.z += p.vz * dt / steps;
-        if (p.y <= 0.05) { p.y = 0.05; hit = true; break; }
+        if (p.y <= 0.05 && !this.map.bounds.void) { p.y = 0.05; hit = true; break; }
+        if (p.y < this.map.killY) { p.life = 0; p.lost = true; break; } // gone into the void
         if (this.solids.some((b) => overlapsBox(p.x, p.y - 0.08, p.z, 0.08, 0.16, b))) { hit = true; break; }
         for (const o of this.entities) {
           if (!o.alive || o.id === p.owner) continue;
@@ -747,6 +757,7 @@ export class Sim {
         if (!hit && !far && p.life > 0) keep.push(p);
         continue;
       }
+      if (p.lost) continue;
       if (hit || p.life <= 0) this.splash(p);
       else keep.push(p);
     }

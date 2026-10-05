@@ -491,8 +491,9 @@ function handleEvents(evs) {
         const killer = ent(ev.killer), victim = ent(ev.victim);
         if (victim) victim.deathAt = G.time;
         audio.play('kill', ev.victim === myId ? null : ev, 0.8);
-        const how = ev.cause === 'tower' ? 'tower collapse' : (WEAPONS[ev.cause] ? WEAPONS[ev.cause].name : ev.cause);
+        const how = ev.cause === 'tower' ? 'tower collapse' : ev.cause === 'void' ? 'into the void' : (WEAPONS[ev.cause] ? WEAPONS[ev.cause].name : ev.cause);
         if (killer && killer !== victim) hud.feed(`${hud.name(killer)} <span class="muted">[${esc(how)}]</span> ${hud.name(victim)}`, ev.killer === myId || ev.victim === myId);
+        else if (ev.cause === 'void') hud.feed(`${hud.name(victim)} <span class="muted">fell into the void</span>`, ev.victim === myId);
         else hud.feed(`${hud.name(victim)} <span class="muted">was crushed by their own tower</span>`, ev.victim === myId);
         if (ev.victim === myId) {
           const by = killer && killer !== victim ? `Taken out by ${hud.name(killer)}. ` : '';

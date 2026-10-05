@@ -11,7 +11,7 @@ import { CHARACTERS, TEAM_COLORS, WEAPONS, GAME } from './config.js';
 import { lookDir } from './physics.js';
 import {
   buildWeapon, buildCharacter, buildViewArm, buildTower, buildArena, buildClouds,
-  buildCave, buildTreasureChest, buildGems, boxGeo, mat,
+  buildCave, buildIslands, buildTreasureChest, buildGems, boxGeo, mat,
 } from './models.js';
 
 // Lighting and atmosphere per map theme
@@ -23,6 +23,10 @@ const THEMES = {
   cave: {
     background: 0x07080c, fog: [0x0c0e15, 24, 85], hemi: [0x95a0c8, 0x40352b, 0.95],
     sun: [0xa9bcff, 1.2], env: 0.2, exposure: 1.15,
+  },
+  sky: {
+    background: 0xbfe0f5, fog: [0xc6e3f6, 90, 320], hemi: [0xd8ecff, 0x5a7aa0, 0.95],
+    sun: [0xfff0d8, 3.0], env: 0.45, exposure: 1.05,
   },
 };
 
@@ -258,7 +262,10 @@ export class Renderer {
     this.clouds = null;
     this.torches = { lights: [], flames: [] };
     if (map.theme === 'cave') this.torches = buildCave(root, map);
-    else {
+    else if (map.theme === 'sky') {
+      buildIslands(root, map);
+      this.clouds = buildClouds(root);
+    } else {
       buildArena(root, map);
       this.clouds = buildClouds(root);
     }

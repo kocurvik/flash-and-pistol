@@ -1,12 +1,14 @@
 // Maps, all built from axis-aligned boxes. Yellow base is at -x, Teal base at +x.
 // - Arena: ~60 x 40 m outdoor arena, last team standing.
 // - Crystal Cave: ~72 x 36 m symmetric cave with chokepoints, capture the treasure.
+// - Sky Bridge: two floating islands joined by a bridge over a void, last team standing.
 
 export const MAPS = {
   arena: { name: 'Arena', mode: 'elimination', modeName: 'Last team standing' },
   cave: { name: 'Crystal Cave', mode: 'ctf', modeName: 'Capture the treasure' },
+  islands: { name: 'Sky Bridge', mode: 'elimination', modeName: 'Last team standing' },
 };
-export const MAP_ORDER = ['arena', 'cave'];
+export const MAP_ORDER = ['arena', 'cave', 'islands'];
 
 const C = {
   wall: 0xd9cbb0,
@@ -31,7 +33,9 @@ function mirrorX(b) { return { ...b, min: [-b.max[0], b.min[1], b.min[2]], max: 
 function mirrorZ(b) { return { ...b, min: [b.min[0], b.min[1], -b.max[2]], max: [b.max[0], b.max[1], -b.min[2]] }; }
 
 export function buildMap(id = 'arena') {
-  return id === 'cave' ? caveMap() : arenaMap();
+  if (id === 'cave') return caveMap();
+  if (id === 'islands') return islandsMap();
+  return arenaMap();
 }
 
 function arenaMap() {
@@ -214,5 +218,71 @@ function caveMap() {
     id: 'cave', ...MAPS.cave, theme: 'cave', ceiling: H,
     boxes, spawns, decor, lanes, homes, flankZ: 9,
     bounds: { minX: -36, maxX: 36, minZ: -18, maxZ: 18 },
+  };
+}
+
+// ---------- Sky Bridge ----------
+// Two floating islands (tops at y = 0) over a void, joined by a 3.2 m wide plank
+// bridge with a wider platform in the middle. There is no ground: whoever walks
+// or is pushed off an edge falls and is out once below killY.
+
+const S = {
+  island: 0x7a6650,
+  bridge: 0x9a6a3c,
+  crate: 0xb5793a,
+  crateDark: 0x8f5a28,
+  pillar: 0xb8b2a6,
+  wall: 0xc9bfa8,
+  post: 0x6b4423,
+};
+
+function islandsMap() {
+  const boxes = [];
+  const add = (b) => boxes.push(b);
+  const addMirrorX = (b) => { add(b); add(mirrorX(b)); };
+  const addMirrorXZ = (b) => { add(b); add(mirrorX(b)); add(mirrorZ(b)); add(mirrorX(mirrorZ(b))); };
+  const ground = (x0, x1, z0, z1, kind, color, depth) => box(x0, x1, -depth, 0, z0, z1, color, { kind, walk: true });
+
+  // Islands: a 20 x 20 m block with a lobe on each side
+  addMirrorX(ground(-32, -12, -10, 10, 'island', S.island, 3));
+  addMirrorXZ(ground(-28, -16, 10, 12, 'island', S.island, 3));
+  // Bridge spans and the middle platform (kept apart so their planks don't overlap)
+  addMirrorX(ground(-12, -3, -1.6, 1.6, 'bridge', S.bridge, 0.35));
+  add(ground(-3, 3, -3.5, 3.5, 'bridge', S.bridge, 0.35));
+  // Rope posts at the bridge heads and the platform corners: markers, not railings
+  addMirrorXZ(centered(-12.4, 1.95, 0.3, 0.3, 1.1, S.post, 0, { kind: 'post' }));
+  addMirrorXZ(centered(-2.75, 3.25, 0.3, 0.3, 1.1, S.post, 0, { kind: 'post' }));
+
+  // Cover by the bridge head
+  addMirrorX(centered(-15, 4.5, 1.4, 1.4, 1.4, S.crate, 0, { kind: 'crate' }));
+  addMirrorX(centered(-15.5, -5, 1.2, 1.2, 1.2, S.crateDark, 0, { kind: 'crate' }));
+  // Ruined low walls across the middle of each island, open in the center
+  addMirrorXZ(box(-21, -20, 0, 1.3, 2.5, 6.5, S.wall, { kind: 'wall' }));
+  // Pillars on the lobes
+  addMirrorXZ(centered(-22, 9.5, 1, 1, 3.5, S.pillar, 0, { kind: 'pillar' }));
+  // A climbable crate stack at the back of each island
+  addMirrorX(centered(-28, -7, 2, 2, 2, S.crate, 0, { kind: 'crate', walk: true }));
+  addMirrorX(centered(-28, -7, 1, 1, 1, S.crateDark, 2, { kind: 'crate' }));
+  addMirrorX(centered(-27, 7, 1.2, 1.2, 1.2, S.crateDark, 0, { kind: 'crate' }));
+
+  const spawns = { yellow: [], teal: [] };
+  for (let i = 0; i < 6; i++) {
+    const z = -3 + i * 1.2;
+    spawns.yellow.push({ x: -29.5, y: 0, z, yaw: -Math.PI / 2 });
+    spawns.teal.push({ x: 29.5, y: 0, z, yaw: Math.PI / 2 });
+  }
+
+  // Team-tinted grass at the back of each island
+  const decor = [
+    { kind: 'floor', team: 'yellow', min: [-32, 0, -10], max: [-26, 0.02, 10] },
+    { kind: 'floor', team: 'teal', min: [26, 0, -10], max: [32, 0.02, 10] },
+  ];
+
+  return {
+    id: 'islands', ...MAPS.islands, theme: 'sky',
+    boxes, spawns, decor, lanes: [{ x: 0, z: 0 }], flankZ: 0,
+    buildX: [14, 24], // Builder bots put towers on their island, not on the bridge
+    killY: -14,
+    bounds: { minX: -40, maxX: 40, minZ: -20, maxZ: 20, void: true },
   };
 }

@@ -204,7 +204,8 @@ export class ClientView {
     }
     for (const p of this.projectiles) {
       p.vy += projectileGravity(p.type) * dt;
-      p.x += p.vx * dt; p.y = Math.max(0.05, p.y + p.vy * dt); p.z += p.vz * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      if (!this.map.bounds.void) p.y = Math.max(0.05, p.y);
     }
   }
 }

@@ -2,6 +2,7 @@
 // Usage: node tools/rules-test.mjs
 import { Sim } from '../src/sim.js';
 import { CHARACTERS, GAME } from '../src/config.js';
+import { nearestNode, findPath, groundAt } from '../src/physics.js';
 
 let failures = 0;
 const check = (name, ok, info = '') => {
@@ -11,8 +12,8 @@ const check = (name, ok, info = '') => {
 const dt = 1 / 60;
 const run = (s, seconds) => { const evs = []; for (let i = 0; i < seconds * 60; i++) { s.tick(dt); evs.push(...s.drainEvents()); } return evs; };
 
-function setup(picks) {
-  const s = new Sim({ teamSize: picks.yellow.length });
+function setup(picks, mapId = 'arena') {
+  const s = new Sim({ teamSize: picks.yellow.length, mapId });
   s.fillBots();
   s.newMatch();
   s.teamMembers('yellow').forEach((e, i) => { e.pick = picks.yellow[i]; });
@@ -229,6 +230,49 @@ const put = (e, x, z, yaw = 0) => { e.pos = { x, y: 0, z }; e.vel = { x: 0, y: 0
   s.damage(t, 99, y, 'machete');
   run(s, 0.1);
   check('arena: last team standing wins, no respawn', s.phase === 'roundEnd' && s.winner === 'yellow' && !t.alive);
+}
+
+// Sky Bridge: no ground under the islands; falling off is out
+{
+  const s = setup({ yellow: ['longman'], teal: ['doctor'] }, 'islands');
+  const [y] = s.teamMembers('yellow');
+  const [t] = s.teamMembers('teal');
+  const map = s.map;
+  check('islands: spawns stand on solid ground', [...map.spawns.yellow, ...map.spawns.teal].every((p) => groundAt(p.x, p.z, 0, s.solids)));
+  check('islands: nav nodes all stand on solid ground', s.nav.nodes.every((n) => groundAt(n.x, n.z, n.y, s.solids)));
+  const path = findPath(s.nav, nearestNode(s.nav, map.spawns.yellow[0], s.solids), nearestNode(s.nav, map.spawns.teal[0], s.solids));
+  check('islands: bots can path across the bridge', path.length > 20 && path.some((n) => Math.abs(n.x) < 2));
+  // Walk off the side of the bridge
+  put(y, -26, 0);
+  put(t, 6, 0, Math.PI); // facing +z
+  t.input.fwd = 1;
+  let evs = run(s, 0.6);
+  t.input.fwd = 0;
+  check('islands: stepping off the bridge drops into the void', !t.onGround && t.pos.y < -0.5, `y=${t.pos.y.toFixed(2)}`);
+  evs = run(s, 2);
+  const kill = evs.find((e) => e.type === 'kill');
+  check('islands: falling below the void line is out, last team standing wins', kill && kill.cause === 'void' && kill.killer === null && s.phase === 'roundEnd' && s.winner === 'yellow');
+}
+{
+  const s = setup({ yellow: ['longman'], teal: ['doctor'] }, 'islands');
+  const [y] = s.teamMembers('yellow');
+  const [t] = s.teamMembers('teal');
+  put(y, -20, 0);
+  put(t, 0, 4.0); // just off the platform edge
+  s.damage(t, 1, y, 'machete');
+  const evs = run(s, 2);
+  const kill = evs.find((e) => e.type === 'kill');
+  check('islands: whoever hit you last gets the kill for the fall', kill && kill.cause === 'void' && kill.killer === y.id && y.kills === 1);
+}
+{
+  const s = setup({ yellow: ['builder'], teal: ['doctor'] }, 'islands');
+  const [b] = s.teamMembers('yellow');
+  put(b, -8, -1.0, 0); // at the bridge's edge, facing -z: void ahead
+  s.placeTower(b, CHARACTERS.builder);
+  check('islands: no tower over the void', s.towers.length === 0);
+  put(b, -20, 0, 0);
+  s.placeTower(b, CHARACTERS.builder);
+  check('islands: towers still go up on the island', s.towers.length === 1 && s.towers[0].y === 0);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll checks passed');

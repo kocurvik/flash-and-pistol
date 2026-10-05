@@ -37,8 +37,27 @@ export function entityHeight(e, def) {
   return def.height * (e.crouch ? GAME.crouchHeightScale : 1);
 }
 
+// Something to stand on at (x, z): a box top between drop below and a step above y
+export function groundAt(x, z, y, boxes, drop = 2.2) {
+  for (const b of boxes) {
+    if (x > b.min[0] && x < b.max[0] && z > b.min[2] && z < b.max[2] && b.max[1] <= y + 0.6 && b.max[1] >= y - drop) return true;
+  }
+  return false;
+}
+
+// Ground all along the straight line from a to b (at a's height)
+export function groundAlong(a, b, boxes) {
+  const steps = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.5);
+  for (let s = 1; s <= steps; s++) {
+    const t = s / steps;
+    if (!groundAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, a.y, boxes)) return false;
+  }
+  return true;
+}
+
 // Moves one entity for one tick. Shared by the host simulation and client-side prediction.
 // input: { fwd, right, jump, jumpPressed, crouch }
+// bounds.void: no ground plane at y = 0, only the boxes hold you up
 // Returns movement events: { poundLanded: box|null, landed: speed|0, jumped: bool }
 const DEFAULT_BOUNDS = { minX: -30, maxX: 30, minZ: -20, maxZ: 20 };
 
@@ -125,7 +144,7 @@ export function stepMovement(e, def, input, dt, solids, ownTowerId, bounds = DEF
   let ny = e.pos.y + vy * dt;
   e.onGround = false;
   e.standingOn = null;
-  if (ny <= 0) {
+  if (ny <= 0 && !bounds.void) {
     ny = 0; e.onGround = true; e.vel.y = 0;
   }
   const b = firstOverlap(e.pos.x, ny, e.pos.z, r, h, solids);
@@ -198,9 +217,11 @@ export function buildNav(boxes, bounds = DEFAULT_BOUNDS) {
   const nodes = [];
   const R = 0.45;
   const free = (x, y, z) => !firstOverlap(x, y + EPS, z, R, 1.0, boxes);
-  for (let x = bounds.minX + 2; x <= bounds.maxX - 2; x += 2) {
-    for (let z = bounds.minZ + 2; z <= bounds.maxZ - 2; z += 2) {
-      if (free(x, 0, z)) nodes.push({ x, y: 0, z });
+  if (!bounds.void) {
+    for (let x = bounds.minX + 2; x <= bounds.maxX - 2; x += 2) {
+      for (let z = bounds.minZ + 2; z <= bounds.maxZ - 2; z += 2) {
+        if (free(x, 0, z)) nodes.push({ x, y: 0, z });
+      }
     }
   }
   for (const b of boxes) {
@@ -216,7 +237,9 @@ export function buildNav(boxes, bounds = DEFAULT_BOUNDS) {
 
   // Body clearance test along the segment, above anything we can step over.
   // Drops test above the higher end so walking off a ledge is allowed.
+  // Over a void, links must also have ground under them all the way.
   const clearPath = (a, b) => {
+    if (bounds.void && !groundAlong(a, b, boxes)) return false;
     const dist = Math.hypot(b.x - a.x, b.z - a.z);
     const steps = Math.ceil(dist / 0.25);
     const y = Math.abs(a.y - b.y) > 0.6 ? Math.max(a.y, b.y) + 0.06 : Math.min(a.y, b.y) + 0.56;
