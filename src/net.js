@@ -2,8 +2,8 @@
 // Host-authoritative: the host browser runs the Sim (with bots) and sends
 // snapshots; clients send inputs and their own predicted movement.
 //
-// Transport is isolated in Relay, so a WebRTC or hosted-server transport can be
-// dropped in later for internet play without touching the game code.
+// Two interchangeable transports speak the same messages: Relay (WebSocket to
+// server.js) and PeerRelay (WebRTC straight between browsers, no server needed).
 import { GAME, projectileGravity } from './config.js';
 import { buildMap } from './map.js';
 import { towerBox, angleDiff } from './physics.js';
@@ -20,10 +20,26 @@ export function relayUrlFromAddress(addr) {
   return 'ws://' + a + '/ws';
 }
 
-export class Relay {
+class Emitter {
+  constructor() { this.handlers = {}; }
+  on(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); }
+  off(type) { delete this.handlers[type]; }
+  emit(type, m) { for (const fn of this.handlers[type] || []) fn(m); }
+
+  // Waits for the next message of a given type
+  wait(type, timeout = 4000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), timeout);
+      const fn = (m) => { clearTimeout(timer); this.handlers[type] = (this.handlers[type] || []).filter((f) => f !== fn); resolve(m); };
+      this.on(type, fn);
+    });
+  }
+}
+
+export class Relay extends Emitter {
   constructor() {
+    super();
     this.ws = null;
-    this.handlers = {};
     this.id = null;
     this.url = null;
   }
@@ -48,19 +64,166 @@ export class Relay {
   }
 
   get open() { return this.ws && this.ws.readyState === 1; }
-  on(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); }
-  off(type) { delete this.handlers[type]; }
-  emit(type, m) { for (const fn of this.handlers[type] || []) fn(m); }
   send(obj) { if (this.open) this.ws.send(JSON.stringify(obj)); }
   close() { this.handlers = {}; if (this.ws) { this.ws.onclose = null; this.ws.close(); } this.ws = null; }
+}
 
-  // Waits for the next message of a given type
-  wait(type, timeout = 4000) {
+// ---------- Peer-to-peer transport (WebRTC via PeerJS) ----------
+// PeerJS's free public server (0.peerjs.com) only brokers the handshake: the host
+// registers under its game code and clients connect to it. Game traffic then
+// flows directly between the browsers (on a LAN it stays on the LAN).
+// Emits the same messages as the relay server, so the game code is unaware.
+
+const PEER_PREFIX = 'flash-and-pistol-';
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I; 32 chars, so no modulo bias
+
+export function randomCode(n = 6) {
+  return [...crypto.getRandomValues(new Uint8Array(n))].map((b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+}
+
+export const normalizeCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+// PeerJS is a classic script (sets window.Peer); load it only when needed
+let peerLib = null;
+function loadPeerJS() {
+  if (window.Peer) return Promise.resolve(window.Peer);
+  return (peerLib ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = new URL('../vendor/peerjs.min.js', import.meta.url).href;
+    s.onload = () => resolve(window.Peer);
+    s.onerror = () => { peerLib = null; reject(new Error('Could not load the networking library.')); };
+    document.head.appendChild(s);
+  }));
+}
+
+// We do our own JSON: PeerJS's JSON mode rejects messages of 16 KB or more
+const CONN_OPTS = { serialization: 'raw', reliable: true };
+
+export class PeerRelay extends Emitter {
+  constructor() {
+    super();
+    this.peer = null;
+    this.id = null;
+    this.room = null;
+    this.conns = new Map(); // host: client id -> DataConnection
+    this.hostConn = null;   // client: the connection to the host
+    this.nextId = 1;
+  }
+
+  get open() { return !!this.peer && !this.peer.destroyed; }
+
+  openPeer(Peer, peerId, timeout) {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout')), timeout);
-      const fn = (m) => { clearTimeout(timer); this.handlers[type] = (this.handlers[type] || []).filter((f) => f !== fn); resolve(m); };
-      this.on(type, fn);
+      const peer = peerId ? new Peer(peerId, { debug: 0 }) : new Peer({ debug: 0 });
+      this.peer = peer;
+      const timer = setTimeout(() => { peer.destroy(); reject(new Error('The connection server did not respond. Check your internet connection.')); }, timeout);
+      const onError = (e) => { clearTimeout(timer); peer.destroy(); reject(e); };
+      peer.once('error', onError);
+      peer.once('open', () => { clearTimeout(timer); peer.off('error', onError); resolve(); });
     });
+  }
+
+  async host(name, timeout = 10000) {
+    const Peer = await loadPeerJS();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const code = randomCode();
+      try {
+        await this.openPeer(Peer, PEER_PREFIX + code, timeout);
+      } catch (e) {
+        if (e.type === 'unavailable-id') continue; // code taken, roll another
+        throw new Error(e.type ? 'Could not reach the connection server.' : e.message);
+      }
+      this.id = 'h';
+      this.room = { id: code, name: `${name}'s game`.slice(0, 40) };
+      this.peer.on('connection', (c) => this.accept(c));
+      this.peer.on('error', () => {}); // e.g. lost the connection server: running games carry on
+      this.peer.on('disconnected', () => { if (!this.peer.destroyed) this.peer.reconnect(); }); // so new players can still join
+      return { room: this.room, you: this.id };
+    }
+    throw new Error('Could not get a free game code.');
+  }
+
+  // Host side: a client sends 'hello' first; everything after that is game data
+  accept(conn) {
+    let id = null;
+    conn.on('data', (raw) => {
+      let d;
+      try { d = JSON.parse(raw); } catch { return; }
+      if (id) { this.emit('msg', { from: id, data: d }); return; }
+      if (!d || d.t !== 'hello') return;
+      id = 'p' + this.nextId++;
+      this.conns.set(id, conn);
+      conn.send(JSON.stringify({ t: 'welcome', you: id, room: this.room }));
+      this.emit('peer-join', { id, name: String(d.name || 'Player').slice(0, 20) });
+    });
+    const gone = () => { if (id && this.conns.delete(id)) this.emit('peer-leave', { id }); };
+    conn.on('close', gone);
+    conn.on('error', gone);
+  }
+
+  async join(code, name, timeout = 15000) {
+    const Peer = await loadPeerJS();
+    try {
+      await this.openPeer(Peer, null, timeout);
+    } catch (e) {
+      throw new Error(e.type ? 'Could not reach the connection server.' : e.message);
+    }
+    return new Promise((resolve, reject) => {
+      let joined = false;
+      const fail = (msg) => {
+        if (joined) return;
+        joined = true;
+        clearTimeout(timer);
+        this.close();
+        reject(new Error(msg));
+      };
+      const timer = setTimeout(() => fail('Could not connect to the host. Some networks block direct connections between devices.'), timeout);
+      this.peer.on('error', (e) => fail(e.type === 'peer-unavailable' ? `No game with code ${code}. Check the code with the host.` : 'Could not connect to the host.'));
+      const conn = this.peer.connect(PEER_PREFIX + code, CONN_OPTS);
+      this.hostConn = conn;
+      conn.on('open', () => conn.send(JSON.stringify({ t: 'hello', name })));
+      conn.on('data', (raw) => {
+        let d;
+        try { d = JSON.parse(raw); } catch { return; }
+        if (joined) { this.emit('msg', { from: 'h', data: d }); return; }
+        if (!d || d.t !== 'welcome') return;
+        joined = true;
+        clearTimeout(timer);
+        this.id = d.you;
+        this.room = d.room;
+        resolve({ you: d.you, room: d.room, host: 'h' });
+      });
+      conn.on('close', () => { if (joined) this.emit('closed', { reason: 'The host left the game.' }); else fail('The host closed the connection.'); });
+    });
+  }
+
+  // The same envelopes as the relay server: bcast/to from the host, up from a client
+  send(obj) {
+    switch (obj.t) {
+      case 'bcast': {
+        const s = JSON.stringify(obj.data);
+        for (const c of this.conns.values()) if (c.open) c.send(s);
+        break;
+      }
+      case 'to': {
+        const c = this.conns.get(obj.id);
+        if (c && c.open) c.send(JSON.stringify(obj.data));
+        break;
+      }
+      case 'up':
+        if (this.hostConn && this.hostConn.open) this.hostConn.send(JSON.stringify(obj.data));
+        break;
+      case 'leave':
+        this.close();
+        break;
+    }
+  }
+
+  close() {
+    this.handlers = {};
+    if (this.peer && !this.peer.destroyed) this.peer.destroy();
+    this.conns.clear();
+    this.hostConn = null;
   }
 }
 

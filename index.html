@@ -218,9 +218,18 @@
         <div class="muted">Games on this network:</div>
         <div id="room-list"></div>
       </div>
+      <div class="stack">
+        <button class="big teal" id="btn-host-code">Host a game</button>
+        <div class="row">
+          <input id="join-code" maxlength="10" placeholder="Game code" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+          <button class="teal" id="btn-join-code" style="flex:0">Join</button>
+        </div>
+        <div class="muted" id="code-status"></div>
+      </div>
       <div id="online-off" class="note hidden">
-        To play together, one person double-clicks <code>play.bat</code> (or runs <code>node server.js</code>).
-        Everyone else opens the link it prints, e.g. <code>http://192.168.1.20:8080</code>.
+        Game codes need internet for a moment to connect everyone. After that the game runs directly
+        between your browsers. No internet? One person double-clicks <code>play.bat</code> and everyone
+        else opens the link it prints, e.g. <code>http://192.168.1.20:8080</code>.
       </div>
       <details>
         <summary>Join by address</summary>
@@ -259,8 +268,9 @@
   <div class="card">
     <h2 id="lobby-title">Lobby</h2>
     <div class="share" id="share">
-      <div class="muted">Friends on the same Wi-Fi / network open this in their browser:</div>
+      <div class="muted" id="share-label">Friends on the same Wi-Fi / network open this in their browser:</div>
       <div class="url" id="share-url">…</div>
+      <div class="muted" id="share-link" style="user-select:text;word-break:break-all"></div>
     </div>
     <div class="teams">
       <div class="team-col yellow"><h3 class="ty">Yellow</h3><div id="lobby-yellow"></div><button class="yellow" id="join-yellow">Join Yellow</button></div>

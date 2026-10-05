@@ -5,7 +5,7 @@ import { Renderer } from './render.js';
 import { Input, ACTIONS, keyName } from './input.js';
 import { Audio } from './audio.js';
 import { HUD, CHAR_ICONS } from './hud.js';
-import { Relay, HostSession, ClientView, relayUrlFromAddress } from './net.js';
+import { Relay, PeerRelay, HostSession, ClientView, relayUrlFromAddress, normalizeCode } from './net.js';
 import { stepMovement, raycast, forwardVec, yawTo } from './physics.js';
 import { buildMap, MAPS, MAP_ORDER } from './map.js';
 import { CHARACTERS, CHARACTER_ORDER, WEAPONS, GAME, TEAM_NAMES, TEAM_COLORS } from './config.js';
@@ -51,6 +51,7 @@ const G = {
   shake: 0,
   net: { spc: 0, flc: 0, pdc: 0, slot: 0, atk: false, tick: 0 },
   lanUrl: null,
+  gameCode: null,    // set when playing over a peer-to-peer game code
 };
 
 renderer.onStep = (e) => {
@@ -105,6 +106,15 @@ function initMenu() {
 
   $('btn-offline').onclick = startOffline;
   $('btn-host').onclick = hostGame;
+  $('btn-host-code').onclick = hostWithCode;
+  $('btn-join-code').onclick = joinWithCode;
+  $('join-code').onkeydown = (ev) => { if (ev.key === 'Enter') joinWithCode(); };
+  // Share links look like .../#join=CODE: fill in the code, the player still clicks Join
+  const linked = normalizeCode((location.hash.match(/join=([^&]*)/) || [])[1]);
+  if (linked) {
+    $('join-code').value = linked;
+    $('code-status').textContent = `Type your name and click Join to enter game ${linked}.`;
+  }
   $('btn-addr').onclick = connectByAddress;
   $('btn-start').onclick = () => { if (G.mode === 'host') G.sim.newMatch(); };
   $('lobby-teamsize').onchange = () => { if (G.mode === 'host') { G.sim.setTeamSize(+$('lobby-teamsize').value); settings.teamSize = G.sim.teamSize; saveSettings(); } };
@@ -143,10 +153,18 @@ async function initOnline() {
   try {
     menuRelay = await openRelay(url);
     $('online-ok').classList.remove('hidden');
+    codeHostSecondary();
   } catch {
     $('online-off').classList.remove('hidden');
   }
   fetch('/info').then((r) => r.json()).then((info) => { G.lanUrl = (info.lan && info.lan[0]) || location.origin; }).catch(() => {});
+}
+
+// With a local server, hosting on it is the main option and game codes the alternative
+function codeHostSecondary() {
+  const b = $('btn-host-code');
+  b.classList.remove('big');
+  b.textContent = 'Host with a game code instead';
 }
 
 async function openRelay(url) {
@@ -189,6 +207,7 @@ async function connectByAddress() {
     G.lanUrl = 'http://' + addr.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
     $('online-ok').classList.remove('hidden');
     $('online-off').classList.add('hidden');
+    codeHostSecondary();
     $('addr-status').textContent = 'Connected. Host a game or join one above.';
   } catch {
     $('addr-status').textContent = `Could not connect to ${url}. Is the server running and the firewall open?`;
@@ -226,6 +245,54 @@ async function hostGame() {
   relay.send({ t: 'host', name: playerName() });
   let m;
   try { m = await relay.wait('hosted'); } catch { alert('The server did not respond.'); return; }
+  startHosting(relay, m);
+}
+
+// Shows progress under the game-code box and blocks double clicks
+function codeBusy(text) {
+  $('code-status').textContent = text || '';
+  for (const id of ['btn-host-code', 'btn-join-code']) $(id).disabled = !!text;
+}
+
+async function hostWithCode() {
+  audio.init();
+  const relay = new PeerRelay();
+  codeBusy('Getting a game code…');
+  let m;
+  try {
+    m = await relay.host(playerName());
+  } catch (err) {
+    relay.close();
+    codeBusy();
+    $('code-status').textContent = err.message;
+    return;
+  }
+  codeBusy();
+  G.gameCode = m.room.id;
+  startHosting(relay, m);
+}
+
+async function joinWithCode() {
+  const code = normalizeCode($('join-code').value);
+  if (!code) { $('code-status').textContent = 'Type the code the host sees in their lobby.'; return; }
+  audio.init();
+  const relay = new PeerRelay();
+  codeBusy(`Joining ${code}…`);
+  let m;
+  try {
+    m = await relay.join(code, playerName());
+  } catch (err) {
+    relay.close();
+    codeBusy();
+    $('code-status').textContent = err.message;
+    return;
+  }
+  codeBusy();
+  G.gameCode = m.room.id;
+  startClient(relay, m);
+}
+
+function startHosting(relay, m) {
   const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty, mapId: settings.map });
   sim.addHuman(m.you, playerName(), 'yellow');
   sim.fillBots();
@@ -248,6 +315,10 @@ async function joinGame(roomId) {
     alert(err.message || 'Could not join.');
     return;
   }
+  startClient(relay, m);
+}
+
+function startClient(relay, m) {
   const view = new ClientView(m.you);
   relay.on('msg', (mm) => {
     const d = mm.data;
@@ -281,6 +352,7 @@ function backToMenu(message) {
   G.sim = null;
   G.host = null;
   G.relay = null;
+  G.gameCode = null;
   G.pauseOpen = false;
   input.unlock();
   for (const id of ['lobby', 'pick', 'pause', 'matchend', 'clickplay']) $(id).classList.add('hidden');
@@ -437,7 +509,17 @@ function renderPick(view, me) {
 
 function renderLobby(view, me) {
   $('lobby-title').textContent = G.roomName || 'Lobby';
-  $('share-url').textContent = G.lanUrl || location.origin;
+  if (G.gameCode) {
+    const link = location.protocol.startsWith('http') ? location.origin + location.pathname + '#join=' + G.gameCode : '';
+    const label = `Game code: friends enter it under <b>Play with friends</b>${link ? ' or open this link' : ''}.`;
+    if ($('share-label').innerHTML !== label) $('share-label').innerHTML = label;
+    $('share-url').textContent = G.gameCode;
+    $('share-link').textContent = link;
+  } else {
+    $('share-label').textContent = 'Friends on the same Wi-Fi / network open this in their browser:';
+    $('share-url').textContent = G.lanUrl || location.origin;
+    $('share-link').textContent = '';
+  }
   const mp = MAPS[view.mapId] || MAPS.arena;
   $('lobby-mapinfo').textContent = `Map: ${mp.name} · ${mp.modeName}`;
   for (const team of ['yellow', 'teal']) {

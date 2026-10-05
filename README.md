@@ -6,7 +6,7 @@ A tiny 3D first-person team brawler for the browser: Yellow vs Teal, four charac
 ## Play in the browser
 
 **[kocurvik.github.io/flash-and-pistol](https://kocurvik.github.io/flash-and-pistol/)**: nothing to
-install; click **Play vs Bots**. Playing with friends needs the local server below.
+install; click **Play vs Bots**, or play with friends using a game code (below).
 
 ## Play
 
@@ -22,7 +22,21 @@ smooth edges and sharp shadows; *High* adds soft shadows and glow effects; *Ultr
 ambient occlusion and is meant for strong graphics cards. On an Intel UHD laptop GPU at
 720p this measured roughly Low 210, Medium 160, High 60 and Ultra 20 FPS.
 
-## Play with friends on the same network (LAN)
+## Play with friends using a game code (no install)
+
+1. Everyone opens the [browser version](https://kocurvik.github.io/flash-and-pistol/).
+2. One person clicks **Host a game**. The lobby shows a game code such as `7KQ2MX` and a link.
+3. Everyone else types the code under *Play with friends* and clicks **Join**, or opens the link.
+4. Players pick a team in the lobby, and the host clicks **Start match**. Bots fill empty slots.
+
+The game runs in the host's browser, and the players' browsers connect to it directly over
+WebRTC ([PeerJS](https://peerjs.com), bundled in `vendor/`). Connecting needs internet for a
+moment because PeerJS's free public server introduces the browsers to each other. After that,
+game traffic goes straight between the computers and never passes through that server. This
+also works between different networks in most cases. If joining fails, some networks (school,
+office or guest Wi-Fi) block direct connections between devices; use the local server below.
+
+## Play with friends on the same network (LAN), without internet
 
 1. One person runs `play.bat`. The window prints a link like `http://192.168.1.20:8080`.
 2. Everyone else opens that link in their browser. Nothing to install.
@@ -92,7 +106,7 @@ No build step: plain ES modules, served as-is.
 | `src/models.js` | Meshes: weapons, characters, towers, treasure, arena and cave details, sky and scenery |
 | `src/render.js` | Three.js scene, lighting, graphics quality and post-processing, animation, effects |
 | `src/hud.js`, `src/input.js`, `src/audio.js` | HUD, keyboard/mouse, synthesized sounds |
-| `src/net.js` | Relay connection, host session, client view with interpolation |
+| `src/net.js` | Relay and peer-to-peer (PeerJS) transports, host session, client view with interpolation |
 | `src/main.js` | Menus, game modes, main loop |
 | `server.js` | Zero-dependency static server + WebSocket relay + lobby |
 
@@ -103,6 +117,7 @@ node tools/headless-test.mjs 10 4 hard   # 10 bot-only matches, prints balance s
 node tools/headless-test.mjs 4 4 normal cave   # the same in the Crystal Cave
 node tools/rules-test.mjs                # checks Spy cloak, last stand, nail gun and treasure rules
 node tools/relay-test.mjs 8080           # smoke test for the running relay server
+node tools/p2p-test.mjs                  # hosts and joins by game code in two headless Chrome windows (needs internet)
 node tools/browser-test.mjs <outDir>     # drives headless Chrome, saves screenshots
 ```
 
@@ -116,9 +131,9 @@ The **host's browser runs the simulation** (including the bots).
 - Clients interpolate other players 100 ms behind.
 - If a player leaves, a bot takes over their slot. If the host leaves, the game ends.
 
-## Internet play (planned, not built yet)
+## More ways to play over the internet
 
-The code is set up so this needs no game-logic changes. In order of effort:
+Game codes already work across networks in most cases. Other options, in order of effort:
 
 1. **Port forwarding.** The host forwards TCP port 8080 on their router. Friends enter
    `<public-ip>:8080` under *Join by address* on the menu. This works today.
@@ -129,9 +144,9 @@ The code is set up so this needs no game-logic changes. In order of effort:
    - add a room code or password;
    - limit message rates;
    - shrink snapshots (send static fields only when they change).
-3. **Peer-to-peer (WebRTC).** Add a `Transport` next to `Relay` in `src/net.js` that uses
-   WebRTC data channels. The relay then only does signaling, and game traffic flows directly
-   between players. `HostSession` and `ClientView` don't change.
+3. **Peer-to-peer (WebRTC).** Done: game codes use `PeerRelay` in `src/net.js` (PeerJS).
+   For full independence from the free PeerJS server, self-host a PeerServer and pass its
+   address to `new Peer()`.
 4. **Dedicated server.** Run `Sim` inside `server.js` instead of in the host's browser.
    It has no DOM dependencies. This removes host advantage and makes cheating harder.
 
