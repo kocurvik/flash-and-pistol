@@ -622,7 +622,7 @@ export class Renderer {
       holder.add(buildViewArm(e.char, e.team));
       holder.add(buildWeapon(e.weapon));
       if (e.weapon === 'kick') {
-        const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.5, 4, 8), mat(0x8a929c, 'metal'));
+        const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.5, 4, 8), mat(0xf2a51a, 'plastic')); // chicken shank
         leg.rotation.x = Math.PI / 2;
         leg.position.set(-0.1, -0.15, -0.2);
         leg.visible = false;

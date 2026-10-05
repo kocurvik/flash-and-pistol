@@ -247,7 +247,41 @@ function limb(r, len, color, kind, x, y, z) {
   return pivot;
 }
 
-function eyes(g, y, z, spread, size = 0.035, color = 0x1a1a1a) {
+// A capsule running from point a to point b ([x, y, z])
+function bone(r, a, b, color, kind) {
+  const A = new THREE.Vector3(...a), d = new THREE.Vector3(...b).sub(A);
+  const len = d.length();
+  const m = part(capsuleGeo(r, len), mat(color, kind), A.x + d.x / 2, A.y + d.y / 2, A.z + d.z / 2);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  return m;
+}
+
+// Chicken leg hanging from a hip pivot: feathered drumstick, scaly shank with
+// a backward-bending hock, three clawed toes forward and one back
+const SCALES = 0xf2a51a, CLAW = 0x3a2a1a;
+function chickenLeg(x, hipY) {
+  const pivot = new THREE.Group();
+  pivot.position.set(x, hipY, 0);
+  const drum = sph(0.11, 0xf4efe4, 'cloth', 0, -0.2, 0.02);
+  drum.scale.set(1, 1.7, 1.15);
+  pivot.add(drum);
+  const hock = [0, -0.56, 0.1], foot = [0, 0.05 - hipY, -0.02];
+  pivot.add(bone(0.035, [0, -0.36, 0.04], hock, SCALES, 'plastic'));
+  pivot.add(sph(0.045, SCALES, 'plastic', ...hock));
+  pivot.add(bone(0.03, hock, foot, SCALES, 'plastic'));
+  pivot.add(bone(0.012, [0, -0.74, 0.06], [0, -0.73, 0.11], CLAW, 'glossy')); // spur
+  const toeY = -hipY + 0.025;
+  for (const yaw of [-0.5, 0, 0.5, Math.PI]) {
+    const len = yaw === Math.PI ? 0.09 : 0.19;
+    const dx = Math.sin(yaw) * len, dz = -Math.cos(yaw) * len;
+    const tip = [dx, toeY, foot[2] + dz];
+    pivot.add(bone(0.022, [0, toeY, foot[2]], tip, SCALES, 'plastic'));
+    pivot.add(bone(0.012, tip, [tip[0] + dx * 0.25, toeY - 0.012, tip[2] + dz * 0.25], CLAW, 'glossy'));
+  }
+  return pivot;
+}
+
+function eyes(g,y, z, spread, size = 0.035, color = 0x1a1a1a) {
   for (const sx of [-1, 1]) g.add(rb(size, size * 1.2, 0.02, color, 'glossy', sx * spread, y, z, 0.006));
 }
 
@@ -314,13 +348,9 @@ export function buildCharacter(char, team) {
     for (const A of [P.armL, P.armR]) A.add(sph(0.1, 0xd9a441, 'cloth', 0, -0.6, 0));
     body.add(P.armL, P.armR);
   } else if (char === 'doctor') {
-    // Robot on two metal legs
-    P.legL = limb(0.06, 0.88, 0x8a929c, 'metal', -0.12, 0.92, 0);
-    P.legR = limb(0.06, 0.88, 0x8a929c, 'metal', 0.12, 0.92, 0);
-    for (const L of [P.legL, P.legR]) {
-      L.add(sph(0.07, 0x555c66, 'metal', 0, -0.45, 0));
-      L.add(rb(0.15, 0.08, 0.26, 0x555c66, 'metal', 0, -0.88, -0.05, 0.03));
-    }
+    // Robot body on two chicken legs
+    P.legL = chickenLeg(-0.13, 0.92);
+    P.legR = chickenLeg(0.13, 0.92);
     body.add(P.legL, P.legR);
     body.add(rb(0.26, 0.14, 0.26, 0x555c66, 'metal', 0, 0.88, 0));
     body.add(rb(0.58, 0.62, 0.46, METAL, 'metal', 0, 1.2, 0, 0.1));
