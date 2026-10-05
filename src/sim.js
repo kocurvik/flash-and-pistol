@@ -971,18 +971,26 @@ export class Sim {
     e.pos.x = nx; e.pos.z = nz;
   }
 
+  // The beam reveals a Spy if it touches any part of his body, not just his chest:
+  // up close a short Spy's chest is below the beam even when his head is lit.
   inFlashlight(holder, target) {
     if (!holder.flashlight || !holder.alive) return false;
     const def = CHARACTERS[holder.char];
+    const td = CHARACTERS[target.char];
     const eye = this.eye(holder);
-    const c = this.chest(target);
-    const dx = c.x - eye.x, dy = c.y - eye.y, dz = c.z - eye.z;
-    const d = Math.hypot(dx, dy, dz);
-    if (d > def.flashlightRange) return false;
     const L = lookDir(holder.yaw, holder.pitch);
-    const cos = (dx * L.x + dy * L.y + dz * L.z) / (d || 1);
-    if (d > 1 && cos < Math.cos(def.flashlightAngle * DEG)) return false;
-    return lineClear(eye, c, this.solids);
+    const h = entityHeight(target, td);
+    for (const f of [0.15, 0.4, 0.65, 0.9]) {
+      const p = { x: target.pos.x, y: target.pos.y + h * f, z: target.pos.z };
+      const dx = p.x - eye.x, dy = p.y - eye.y, dz = p.z - eye.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > def.flashlightRange + td.radius) continue;
+      const cos = Math.max(-1, Math.min(1, (dx * L.x + dy * L.y + dz * L.z) / (d || 1)));
+      // The body's own width counts too
+      if (d > 1 && Math.acos(cos) - Math.atan2(td.radius, d) > def.flashlightAngle * DEG) continue;
+      if (lineClear(eye, p, this.solids)) return true;
+    }
+    return false;
   }
 
   updateReveals() {

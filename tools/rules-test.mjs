@@ -210,6 +210,17 @@ const put = (e, x, z, yaw = 0) => { e.pos = { x, y: 0, z }; e.vel = { x: 0, y: 0
   check('carrying the treasure home wins the round', s.phase === 'roundEnd' && s.winner === 'yellow' && s.score.yellow === 1 && evs.some((e) => e.type === 'flagCapture'));
 }
 
+// Flashlight reveals a Spy up close too, where his chest is below the beam
+{
+  const s = setup({ yellow: ['longman'], teal: ['spy'] });
+  const [lm] = s.teamMembers('yellow');
+  const [spy] = s.teamMembers('teal');
+  lm.flashlight = true;
+  const seen = (d, x = 0) => { put(lm, 0, -5); lm.pitch = 0; put(spy, x, -5 - d); return s.inFlashlight(lm, spy); };
+  check('flashlight reveals a Spy at 1.2, 2 and 9 m', seen(1.2) && seen(2) && seen(9));
+  check('flashlight misses a Spy outside the beam or range', !seen(0, 2) && !seen(11.3));
+}
+
 // Elimination still ends the round on the arena map; no respawns there
 {
   const s = setup({ yellow: ['longman'], teal: ['doctor'] });

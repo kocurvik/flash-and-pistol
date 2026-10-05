@@ -172,7 +172,7 @@ function caveMap() {
   // Side lane cover: boulders and short stalagmites
   addMirrorXZ(centered(-17, 8, 1.6, 1.6, 1.3, R.rock, 0, { kind: 'boulder' }));
   addMirrorXZ(centered(-13.5, 5, 1, 1, 2.2, R.column, 0, { kind: 'stalagmite' }));
-  // Base: low rocks in front of the treasure, supply crates by the spawn
+  // Base: low rocks on both sides of the treasure, supply crates by the spawn
   addMirrorXZ(centered(-27.5, 3.5, 1.2, 1.2, 1.0, R.rock, 0, { kind: 'boulder' }));
   addMirrorXZ(centered(-34.5, 6.8, 1.4, 1.4, 1.4, R.crate, 0, { kind: 'crate' }));
 
@@ -182,7 +182,7 @@ function caveMap() {
     spawns.yellow.push({ x: -34.8, y: 0, z, yaw: -Math.PI / 2 });
     spawns.teal.push({ x: 34.8, y: 0, z, yaw: Math.PI / 2 });
   }
-  const homes = { yellow: { x: -31, y: 0, z: 0 }, teal: { x: 31, y: 0, z: 0 } };
+  const homes = { yellow: { x: -27.5, y: 0, z: 0 }, teal: { x: 27.5, y: 0, z: 0 } };
 
   const decor = [
     { kind: 'floor', team: 'yellow', min: [-36, 0, -8.5], max: [-24, 0.02, 8.5] },
