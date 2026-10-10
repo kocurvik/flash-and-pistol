@@ -16,7 +16,7 @@ export const WEAPONS = {
 
 export const CHARACTERS = {
   longman: {
-    name: 'Longman', role: 'Tank', hearts: 6, speed: 4.0,
+    name: 'Longman', role: 'Tank', hearts: 4, speed: 4.0,
     height: 2.1, radius: 0.4, eye: 1.92,
     primary: 'machete', backup: 'dagger', special: 'medkit',
     medkitHeal: 2, medkitCooldown: 20,
@@ -24,7 +24,7 @@ export const CHARACTERS = {
     blurb: 'Slow and tough. {special}: medkit heals 2. Flashlight ({flash}) reveals Spies.',
   },
   builder: {
-    name: 'Builder', role: 'Area control', hearts: 4, speed: 5.5,
+    name: 'Builder', role: 'Area control', hearts: 5, speed: 5.5,
     height: 1.6, radius: 0.5, eye: 1.45,
     primary: 'wrench', backup: 'fists', special: 'tower',
     buildTime: 2, towerHeight: 3, towerSize: 1.3, towerHp: 6,
@@ -32,18 +32,18 @@ export const CHARACTERS = {
     // Nail gun from the tower top. Nails only hurt enemies whose distance from the
     // tower base is within [nailMinRange, nailMaxRange]: close enemies are in a blind spot.
     nailMinRange: 5, nailMaxRange: 20, nailSpeed: 30, nailGravity: -4,
-    blurb: 'Wrench spins around you. Hold {special} to build a tower. On top: nail gun hits enemies 5–20 m away, {crouch}+{jump} collapses it.',
+    blurb: 'Wrench spins around you. Hold {special} to build a tower. On top: nail gun hits enemies 5–20 m away, {crouch} collapses it.',
   },
   doctor: {
-    name: 'Doctor', role: 'Healer', hearts: 4, speed: 7.2,
+    name: 'Doctor', role: 'Healer', hearts: 3, speed: 7.2,
     height: 1.7, radius: 0.4, eye: 1.5,
     primary: 'axe', backup: 'kick', special: 'bottle',
     doubleJump: true,
-    bottleHeal: 2, bottleRadius: 2.5, bottleCooldown: 15, bottleSpeed: 13,
+    bottleHeal: 2, bottleRadius: 2.5, bottleCooldown: 8, bottleSpeed: 13,
     blurb: 'Fast, with a double jump. Axe heals teammates. {special} throws a healing bottle.',
   },
   spy: {
-    name: 'Spy', role: 'Thief / assassin', hearts: 3, speed: 6.5,
+    name: 'Spy', role: 'Thief / assassin', hearts: 2, speed: 6.5,
     height: 1.45, radius: 0.35, eye: 1.3,
     primary: 'fists', backup: null, special: 'steal',
     stealRange: 2.2, stealCooldown: 8, flickerTime: 1.0,

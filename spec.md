@@ -29,10 +29,10 @@ Each character has one primary weapon, one backup weapon and one special. All nu
 
 | Character | Role | Hearts | Speed (m/s) | Primary | Backup | Special |
 | --- | --- | --- | --- | --- | --- | --- |
-| Longman | Tank | 6 | 4.0 | Machete | Dagger | Medkit, flashlight |
-| Builder | Area control | 4 | 5.5 | Wrench | Fists *(assumption)* | Collapsing tower |
-| Doctor | Healer | 4 | 7.2 | Axe | Kick *(assumption)* | Healing bottle |
-| Spy | Thief / assassin | 3 | 6.5 | Fists | none | Invisibility, steal weapon |
+| Longman | Tank | 4 | 4.0 | Machete | Dagger | Medkit, flashlight |
+| Builder | Area control | 5 | 5.5 | Wrench | Fists *(assumption)* | Collapsing tower |
+| Doctor | Healer | 3 | 7.2 | Axe | Kick *(assumption)* | Healing bottle |
+| Spy | Thief / assassin | 2 | 6.5 | Fists | none | Invisibility, steal weapon |
 
 ### Longman
 
@@ -49,7 +49,7 @@ The Builder controls space with towers that turn into traps.
 
 - **Wrench (primary):** a spin attack swung around the head. Hits every enemy within 2 m for 2 hearts, 1.2 s between spins.
 - **Fists (backup):** 1 heart damage, used if the wrench is stolen. Towers cannot be built without the wrench.
-- **Collapsing tower:** hold the build key for 2 s to build a 3 m tall tower in front of you. Only one tower at a time. The Builder can climb it and use it as a lookout. When he jumps down hard onto its top (crouch + jump while standing on it), the tower collapses: every enemy within 3 m of its base loses 4 hearts, and the Builder loses 1 heart. New tower available 25 s after a collapse.
+- **Collapsing tower:** hold the build key for 2 s to build a 3 m tall tower in front of you. Only one tower at a time. The Builder can climb it and use it as a lookout. When he crouches while standing on its top, he stomps down and the tower collapses: every enemy within 3 m of its base loses 4 hearts, and the Builder loses 1 heart. New tower available 25 s after a collapse.
 
 ### Doctor
 
@@ -57,7 +57,7 @@ A robot doctor on two regular legs. Healing is its main job.
 
 - **Movement:** walks and runs normally (no hopping), is the fastest character and has a double jump, so it is good at reaching teammates.
 - **Axe (primary):** hitting a teammate heals them 1 heart. Hitting an enemy removes 1 heart. 0.7 s between swings.
-- **Healing bottle:** thrown like a grenade. On impact it splashes and heals all teammates within 2.5 m by 2 hearts (the Doctor too). Recharges after 15 s.
+- **Healing bottle:** thrown like a grenade. On impact it splashes and heals all teammates within 2.5 m by 2 hearts (the Doctor too). Recharges after 8 s.
 - **Kick (backup):** 1 heart damage, used if the axe is stolen. The bottle still works.
 - Heals cannot go above a character's max hearts.
 
@@ -77,12 +77,12 @@ Every character beats one other and loses to another, so no single pick is alway
 
 | Character | Strong against | Weak against | Why |
 | --- | --- | --- | --- |
-| Longman | Spy | Builder | Flashlight reveals Spies and 6 hearts outlast his punches; but he is too slow to escape a tower collapse. |
+| Longman | Spy | Builder | Flashlight reveals Spies and 4 hearts outlast his punches; but he is too slow to escape a tower collapse. |
 | Builder | Longman, groups | Doctor, Spy | Tower collapses punish slow or clustered enemies; a fast, double-jumping Doctor dodges, and a Spy can steal the wrench. |
-| Doctor | Builder, long fights | Spy | Healing wins drawn-out fights; but 4 hearts and a predictable heal target make it a Spy's favorite victim. |
-| Spy | Doctor, Builder | Longman | Invisible thief who cripples key players; only 3 hearts, so one good machete hit nearly kills him. |
+| Doctor | Builder, long fights | Spy | Healing wins drawn-out fights; but 3 hearts and a predictable heal target make it a Spy's favorite victim. |
+| Spy | Doctor, Builder | Longman | Invisible thief who cripples key players; only 2 hearts, so one good machete hit kills him. |
 
-- **The Spy risk:** the designer wanted picking Spy again to feel risky. With 3 hearts and a hard counter (flashlight), a careless Spy dies early and sits out the round.
+- **The Spy risk:** the designer wanted picking Spy again to feel risky. With 2 hearts and a hard counter (flashlight), a careless Spy dies early and sits out the round.
 - **Main tuning knobs:** Spy flicker time, flashlight range, tower damage and cooldown, Doctor heal amounts. Change these first if a character feels too strong or weak.
 
 ## Crystal Cave: capture the treasure
@@ -132,7 +132,7 @@ Bots use a simple priority list checked about 5 times per second: they do the fi
 
 **Character rules (checked before the shared rules):**
 
-- **Longman bot:** uses the medkit at ≤ 3 hearts. Turns on the flashlight when hit by something it cannot see, and sweeps it around.
+- **Longman bot:** uses the medkit at ≤ 2 hearts. Turns on the flashlight when hit by something it cannot see, and sweeps it around.
 - **Builder bot:** builds a tower near a waypoint enemies often pass. When 2 or more enemies are within 3 m of its tower, climbs up and collapses it.
 - **Doctor bot:** follows the most injured teammate and swings the axe at them until healed. Throws the bottle when 2 or more teammates are hurt and close together. Only fights when nobody needs healing.
 - **Spy bot:** sneaks along the side lanes toward the enemy Doctor or Builder, steals their weapon, then attacks from behind with it. Retreats from any lit flashlight.

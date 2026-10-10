@@ -229,7 +229,7 @@ export class BotBrain {
   thinkLongman(ctx) {
     const { sim, e } = this;
     const def = CHARACTERS.longman;
-    if (e.hearts <= 3 && e.specialCd <= 0 && e.hearts < e.maxHearts && Math.random() < this.diff.specialChance * 0.5) this.pressSpecial = true;
+    if (e.hearts <= 2 && e.specialCd <= 0 && e.hearts < e.maxHearts && Math.random() < this.diff.specialChance * 0.5) this.pressSpecial = true;
     // Hit by something we can't see: flashlight on and sweep around
     const attacker = sim.get(e.lastAttacker);
     if (sim.time - e.lastHurtT < 0.25 && attacker && !ctx.vis.includes(attacker)) {
@@ -282,7 +282,7 @@ export class BotBrain {
     const worth = near.length >= needed && (e.hearts > 1 || near.length >= 2 || near.some((o) => o.hearts <= 4));
     if (onTop) {
       this.goal = { x: tower.x, y: tower.y + tower.height, z: tower.z };
-      if (worth && near.length > 0) { this.crouch = true; this.pressJump = true; return true; }
+      if (worth && near.length > 0) { this.crouch = true; return true; }
       // Nail gun: shoot enemies outside the blind spot and inside range
       const inBand = ctx.ready.find((o) => {
         const d = Math.hypot(o.pos.x - tower.x, o.pos.z - tower.z);

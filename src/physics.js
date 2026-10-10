@@ -89,9 +89,9 @@ export function stepMovement(e, def, input, dt, solids, ownTowerId, bounds = DEF
     e.vel.z += (wz * speed - e.vel.z) * k;
   }
 
-  // Ground pound: Builder on top of his own tower, crouch + jump
+  // Ground pound: Builder on top of his own tower presses crouch
   const standingOnOwnTower = e.onGround && e.standingOn && e.standingOn.tower != null && e.standingOn.tower === ownTowerId;
-  if (input.jumpPressed && input.crouch && standingOnOwnTower) {
+  if (input.crouch && !wasCrouch && standingOnOwnTower) {
     e.vel.y = 6;
     e.pounding = true;
     e.onGround = false;

@@ -159,7 +159,7 @@ export class HUD {
     if (me.weapon === 'nailgun') {
       const b = CHARACTERS.builder;
       return `<div class="slot active"><span class="k">${this.key('attack')}</span>Nail gun · hits ${b.nailMinRange}–${b.nailMaxRange} m from the tower</div>` +
-        `<div class="slot active"><span class="k">${this.key('crouch')}+${this.key('jump')}</span>Collapse tower</div>`;
+        `<div class="slot active"><span class="k">${this.key('crouch')}</span>Collapse tower</div>`;
     }
     const slots = [];
     if (def.special === 'steal') {

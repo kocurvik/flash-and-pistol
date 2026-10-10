@@ -373,8 +373,7 @@ function renderControlsList() {
     [keys('attack'), 'Attack (hold to keep swinging)'],
     [keys('special'), 'Special: medkit, build tower, throw bottle, steal'],
     [keys('jump'), 'Jump (Doctor: double jump)'],
-    [keys('crouch'), 'Crouch'],
-    [`${input.label('crouch')} + ${input.label('jump')}`, 'Builder on his tower: collapse it!'],
+    [keys('crouch'), 'Crouch (Builder on his tower: collapse it!)'],
     [keys('flash'), 'Longman flashlight (reveals Spies)'],
     [`${keys('weapon1')} / ${keys('weapon2')} / wheel`, 'Switch weapon'],
     [keys('scores'), 'Scoreboard'],
@@ -723,7 +722,7 @@ function handleEvents(evs) {
 // ---------- Hints ----------
 
 const K = (id) => `<b>${esc(input.label(id))}</b>`;
-const collapseKeys = () => `${K('crouch')} + ${K('jump')}`;
+const collapseKeys = () => K('crouch');
 
 // Fills {special}, {flash}, {crouch}, {jump}... in texts with the current key names
 function withKeys(text) {
