@@ -1,7 +1,7 @@
 // Checks the Spy cloak, last stand, nail gun and capture-the-treasure rules against config values.
 // Usage: node tools/rules-test.mjs
 import { Sim } from '../src/sim.js';
-import { CHARACTERS, GAME } from '../src/config.js';
+import { CHARACTERS, GAME, WEAPONS } from '../src/config.js';
 import { nearestNode, findPath, groundAt } from '../src/physics.js';
 
 let failures = 0;
@@ -273,6 +273,78 @@ const put = (e, x, z, yaw = 0) => { e.pos = { x, y: 0, z }; e.vel = { x: 0, y: 0
   put(b, -20, 0, 0);
   s.placeTower(b, CHARACTERS.builder);
   check('islands: towers still go up on the island', s.towers.length === 1 && s.towers[0].y === 0);
+}
+
+// ---------- Sniper ----------
+{
+  const s = setup({ yellow: ['sniper'], teal: ['longman'] });
+  const [sn] = s.teamMembers('yellow');
+  const [lm] = s.teamMembers('teal');
+  const def = CHARACTERS.sniper;
+  check('sniper is slightly faster than Longman', def.speed > CHARACTERS.longman.speed && def.speed < CHARACTERS.builder.speed);
+  check('sniper spawns with the rifle and 5 bullets', sn.weapon === 'rifle' && sn.ammo === WEAPONS.rifle.ammo && WEAPONS.rifle.ammo === 5);
+  // Long shot down the arena's middle: 2 hearts
+  put(sn, -20, 4, -Math.PI / 2); // facing +x, clear line of fire
+  put(lm, 8, 4);
+  sn.pitch = sn.input.pitch = 0;
+  sn.input.attack = true;
+  let evs = run(s, 0.05);
+  sn.input.attack = false;
+  const hit = evs.find((e) => e.type === 'hurt' && e.id === lm.id);
+  check('rifle hits at 28 m for 2 hearts', hit && hit.amount === 2 && hit.cause === 'rifle', JSON.stringify(hit));
+  check('a shot uses a bullet', sn.ammo === 4);
+  run(s, WEAPONS.rifle.cooldown * 0.5);
+  sn.input.attack = true;
+  run(s, 0.05);
+  check('rifle is slow: no second shot before its cooldown', sn.ammo === 4);
+  sn.input.attack = false;
+  // Spend the rest: the bow comes out
+  lm.hearts = 99;
+  for (let i = 0; i < 4; i++) { sn.attackCd = 0; s.attack(sn, def); }
+  check('out of bullets switches to the bow', sn.ammo === 0 && sn.weapon === 'bow');
+  sn.input.slot = 1;
+  run(s, 0.05);
+  check('cannot switch back to an empty rifle', sn.weapon === 'bow');
+  check('bow is faster than the rifle', WEAPONS.bow.cooldown < WEAPONS.rifle.cooldown);
+  // Arrow: projectile, 1 heart
+  put(lm, -13, 4);
+  lm.hearts = 4;
+  sn.attackCd = 0;
+  sn.input.attack = true;
+  run(s, 0.05);
+  sn.input.attack = false;
+  evs = run(s, 1);
+  const ah = evs.find((e) => e.type === 'hurt' && e.id === lm.id);
+  check('bow arrow hits for 1 heart', ah && ah.amount === 1 && ah.cause === 'bow', JSON.stringify(ah));
+}
+{
+  const s = setup({ yellow: ['sniper', 'longman'], teal: ['spy', 'doctor'] });
+  const [sn, ylm] = s.teamMembers('yellow');
+  const [spy, tdoc] = s.teamMembers('teal');
+  put(ylm, -25, -15); put(tdoc, 25, 15); // out of the way; the Doctor avoids a Spy-only last stand
+  put(sn, -14, 4, -Math.PI / 2);
+  put(spy, 0, 4);
+  spy.cloakT = -99; // no cloak flicker during the test
+  run(s, 0.05);
+  check('unscoped sniper cannot see a cloaked Spy', !spy.revealed && !s.canSee(sn, spy));
+  sn.input.special = true;
+  run(s, 0.05);
+  check('scoped sniper sees a Spy in his scope', sn.scoped && s.canSee(sn, spy) && !spy.revealed);
+  put(spy, -14, 12);
+  check('the scope only shows Spies inside its view', !s.canSee(sn, spy));
+  sn.input.fwd = 1;
+  const x0 = sn.pos.x;
+  run(s, 1);
+  sn.input.fwd = 0;
+  check('scoped sniper walks slower', sn.pos.x - x0 < CHARACTERS.sniper.speed * 0.6, `${(sn.pos.x - x0).toFixed(2)} m/s`);
+  sn.input.special = false;
+  // A Spy stealing the rifle takes the bullets left in it
+  sn.ammo = 3;
+  put(sn, 0, 4, 0);
+  put(spy, 0, 5.5, 0); // behind him, facing him (-z)
+  spy.input.specialPressed = true;
+  run(s, 0.05);
+  check('stolen rifle keeps its bullets', spy.stolen === 'rifle' && spy.ammo === 3 && sn.ammo === 0 && sn.weapon === 'bow' && !sn.scoped);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll checks passed');

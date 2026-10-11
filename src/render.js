@@ -11,7 +11,7 @@ import { CHARACTERS, TEAM_COLORS, WEAPONS, GAME } from './config.js';
 import { lookDir } from './physics.js';
 import {
   buildWeapon, buildCharacter, buildViewArm, buildTower, buildArena, buildClouds,
-  buildCave, buildIslands, buildTreasureChest, buildGems, boxGeo, mat,
+  buildCave, buildIslands, buildTreasureChest, buildGems, boxGeo, mat, part,
 } from './models.js';
 
 // Lighting and atmosphere per map theme
@@ -47,8 +47,11 @@ const VM_REST = {
   machete: { rx: 0.85, ry: -0.1, rz: -0.3 }, axe: { rx: 0.95, ry: -0.15, rz: -0.3 },
   dagger: { rx: 0.15, ry: 0, rz: 0 }, knife: { rx: 0.15, ry: 0, rz: 0 },
   wrench: { rx: 0.55, ry: 0.2, rz: -0.35 }, nailgun: { rx: 0, ry: 0, rz: 0 },
+  rifle: { rx: 0.02, ry: 0.04, rz: 0 }, bow: { rx: 0.05, ry: 0.1, rz: -0.35 },
 };
 const CHOPPERS = new Set(['machete', 'axe']);
+const GUNS = new Set(['nailgun', 'rifle', 'bow']); // held pointing along the aim
+const FOV = 75;
 
 // ---------- Text / heart sprites ----------
 function makeLabelSprite() {
@@ -318,6 +321,8 @@ export class Renderer {
     const cam = this.camera;
     cam.position.set(opts.camera.x, opts.camera.y, opts.camera.z);
     cam.rotation.set(opts.camera.pitch, opts.camera.yaw, 0);
+    const fov = FOV / (opts.zoom || 1);
+    if (cam.fov !== fov) { cam.fov = fov; cam.updateProjectionMatrix(); }
 
     this.updateCharacters(view, opts, dt);
     this.updateTowers(view, dt, opts.time);
@@ -366,7 +371,7 @@ export class Renderer {
       if (isLocal && opts.firstPerson) mode = 'hidden';
       else if (e.char === 'spy' && e.alive) {
         if (e.team === opts.viewerTeam) mode = 'ghost';
-        else mode = e.revealed ? 'glow' : 'hidden';
+        else mode = e.revealed || opts.scoped ? 'glow' : 'hidden'; // the Sniper's scope shows Spies
       }
       this.setMode(m, mode, e.team);
       if (mode === 'glow') this.glowMat.opacity = 0.35 + Math.sin(opts.time * 18) * 0.15;
@@ -408,7 +413,7 @@ export class Renderer {
       m.swingT += dt;
       const st = Math.min(1, m.swingT / 0.3);
       // Positive x rotation swings a hanging limb forward
-      const gun = w === 'nailgun';
+      const gun = GUNS.has(w);
       let armR = (gun ? 1.45 : 0.9) + e.pitch * 0.8; // hold weapon forward
       let spin = 0;
       if (m.swingT < 0.3) {
@@ -512,6 +517,16 @@ export class Renderer {
     for (const p of view.projectiles) {
       seen.add(p.id);
       let pm = this.projMeshes.get(p.id);
+      if (!pm && p.type === 'arrow') {
+        // Built along +z: lookAt below points +z along the flight
+        const g = new THREE.Group();
+        g.add(part(boxGeo(0.025, 0.025, 0.7), mat(0x8a5a2b, 'wood')));
+        g.add(part(boxGeo(0.045, 0.045, 0.1), mat(0x9aa3ad, 'metal'), 0, 0, 0.38));
+        for (const [w, h] of [[0.12, 0.012], [0.012, 0.12]]) g.add(part(boxGeo(w, h, 0.12), mat(TEAM_COLORS[p.team], 'cloth'), 0, 0, -0.28));
+        this.scene.add(g);
+        pm = { group: g, nail: true };
+        this.projMeshes.set(p.id, pm);
+      }
       if (!pm && p.type === 'nail') {
         const g = new THREE.Group();
         // Hot, glowing nail so it reads at speed (and blooms)
@@ -614,7 +629,7 @@ export class Renderer {
 
   updateViewmodel(view, opts, dt) {
     const e = view.entities.find((x) => x.id === opts.localId);
-    const show = e && e.alive && opts.firstPerson && view.phase !== 'pick';
+    const show = e && e.alive && opts.firstPerson && view.phase !== 'pick' && !opts.scoped;
     this.vm.visible = !!show;
     if (this.buildPreview) this.buildPreview.visible = false;
     if (!show) return;
@@ -676,6 +691,8 @@ export class Renderer {
     const H = this.vmHolder, Pv = this.vmPivot;
     const rest = VM_REST[e.weapon] || { rx: 0, ry: 0, rz: 0 };
     if (e.weapon === 'nailgun') H.position.set(0.42, -0.42 + bob, -0.55);
+    else if (e.weapon === 'rifle') H.position.set(0.3 + sway, -0.34 + bob, -0.45);
+    else if (e.weapon === 'bow') H.position.set(0.2 + sway, -0.3 + bob, -0.6);
     else if (CHOPPERS.has(e.weapon)) H.position.set(0.42 + sway, -0.4 + bob, -0.5);
     else H.position.set(0.34 + sway, -0.36 + bob, -0.5);
     H.rotation.set(rest.rx, rest.ry, rest.rz);
@@ -705,7 +722,7 @@ export class Renderer {
           H.rotation.set(0.3, Math.PI / 2, 0);
           break;
         case 'shoot':
-          H.position.z = -0.5 + s * 0.12;
+          H.position.z += s * 0.12;
           H.rotation.x = s * 0.3;
           break;
         case 'kick':
@@ -764,6 +781,15 @@ export class Renderer {
     this.ring(x, y, z, team === 'yellow' ? 0xffd43b : 0x4ee6dc, 3, Math.min(1.2, life));
   }
 
+  // Bullet trail from the muzzle to where the shot landed
+  tracer(x, y, z, hx, hy, hz) {
+    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, y, z), new THREE.Vector3(hx, hy, hz)]);
+    const m0 = new THREE.LineBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.9, fog: false });
+    const line = new THREE.Line(geo, m0);
+    this.scene.add(line);
+    this.particles.push({ obj: line, vx: 0, vy: 0, vz: 0, life: 0.35, max: 0.35, gravity: 0, fade: true, mat: m0, own: true, geo });
+  }
+
   spawnText(text, color, x, y, z) {
     const s = textSprite(text, color);
     s.position.set(x + (Math.random() - 0.5) * 0.4, y, z + (Math.random() - 0.5) * 0.4);
@@ -818,6 +844,7 @@ export class Renderer {
         if (p.sprite) { p.obj.material.map.dispose(); p.obj.material.dispose(); }
         else if (p.mat && p.grow) { p.obj.geometry.dispose(); p.mat.dispose(); }
         else if (p.own) p.mat.dispose();
+        if (p.geo) p.geo.dispose();
         continue;
       }
       p.vy += p.gravity * dt;

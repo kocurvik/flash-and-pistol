@@ -10,7 +10,7 @@ export const ACTIONS = [
   { id: 'jump', label: 'Jump', keys: ['Space', null] },
   { id: 'crouch', label: 'Crouch', keys: ['ShiftLeft', 'KeyC'] },
   { id: 'attack', label: 'Attack', keys: ['Mouse0', null] },
-  { id: 'special', label: 'Special (medkit, tower, bottle, steal)', keys: ['Mouse2', 'KeyE'] },
+  { id: 'special', label: 'Special (medkit, tower, bottle, steal, scope)', keys: ['Mouse2', 'KeyE'] },
   { id: 'flash', label: 'Flashlight (Longman)', keys: ['KeyF', null] },
   { id: 'weapon1', label: 'Weapon 1', keys: ['Digit1', null] },
   { id: 'weapon2', label: 'Weapon 2', keys: ['Digit2', null] },
@@ -73,7 +73,7 @@ export class Input {
       if (['Space', 'Tab', 'ArrowUp', 'ArrowDown'].includes(e.code) || (this.locked && this.isBound(e.code))) e.preventDefault();
       if (!e.repeat) {
         this.press(e.code);
-        if (/^Digit[1-4]$/.test(e.code)) this.pickRequest = +e.code.slice(5);
+        if (/^Digit[1-5]$/.test(e.code)) this.pickRequest = +e.code.slice(5);
       }
       this.down.add(e.code);
     });

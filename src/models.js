@@ -231,6 +231,34 @@ export function buildWeapon(id) {
       g.add(mag);
       break;
     }
+    case 'rifle': {
+      const up = (m, y) => { m.position.y = y; return m; };
+      g.add(rb(0.05, 0.11, 0.3, 0x6b4423, 'wood', 0, -0.02, 0.2, 0.02)); // stock
+      g.add(rb(0.04, 0.1, 0.05, 0x5a3a1e, 'wood', 0, -0.07, 0.02, 0.012)); // grip
+      g.add(rb(0.055, 0.075, 0.44, 0x6b4423, 'wood', 0, 0.0, -0.2, 0.015)); // forestock
+      g.add(rb(0.05, 0.06, 0.24, DARK, 'metal', 0, 0.035, -0.06, 0.01)); // receiver
+      g.add(up(rod(0.016, DARK, 'metal', -0.3, -1.0), 0.03)); // barrel
+      g.add(up(rod(0.022, DARK, 'metal', -0.96, -1.04), 0.03)); // muzzle
+      g.add(up(rod(0.026, 0x1a1a1f, 'metal', 0.0, -0.3), 0.11)); // scope tube
+      g.add(up(rod(0.036, 0x1a1a1f, 'metal', -0.27, -0.34, 0.026), 0.11));
+      g.add(up(rod(0.032, 0x1a1a1f, 'metal', 0.05, 0.0, 0.026), 0.11));
+      for (const z of [-0.06, -0.24]) g.add(rb(0.02, 0.05, 0.025, DARK, 'metal', 0, 0.075, z, 0.005)); // mounts
+      g.add(part(boxGeo(0.05, 0.05, 0.004), mat(0x5fd0ff, 'glossy', 0x2a9fd6, 1.2), 0, 0.11, -0.343, false)); // lens
+      break;
+    }
+    case 'bow': {
+      // Held upright in the fist; limbs curve back toward the archer at the tips
+      const WOOD = 0x7a4e2a;
+      for (const s of [1, -1]) {
+        g.add(bone(0.02, [0, s * 0.05, -0.02], [0, s * 0.28, -0.01], WOOD, 'wood'));
+        g.add(bone(0.015, [0, s * 0.28, -0.01], [0, s * 0.44, 0.08], WOOD, 'wood'));
+      }
+      g.add(rb(0.05, 0.12, 0.05, 0x3a2a1a, 'cloth', 0, 0, -0.02, 0.015)); // grip wrap
+      g.add(bone(0.004, [0, 0.44, 0.08], [0, -0.44, 0.08], 0xeeeeee, 'cloth')); // string
+      g.add(rod(0.008, 0x8a5a2b, 'wood', 0.08, -0.5)); // nocked arrow
+      g.add(part(boxGeo(0.03, 0.03, 0.07), mat(0x9aa3ad, 'metal'), 0, 0, -0.53));
+      break;
+    }
     default:
       break; // fists, kick: no model
   }
@@ -371,6 +399,29 @@ export function buildCharacter(char, team) {
     P.armR = limb(0.05, 0.56, METAL, 'metal', 0.36, 1.45, 0);
     for (const A of [P.armL, P.armR]) A.add(sph(0.065, 0x3a3f47, 'metal', 0, -0.55, 0));
     body.add(P.armL, P.armR);
+  } else if (char === 'sniper') {
+    // Bush hat, sunglasses, olive vest with ammo pouches over a team shirt
+    const khaki = 0x7a6a48, olive = 0x4f5a34;
+    P.legL = limb(0.08, 0.86, khaki, 'cloth', -0.11, 0.86, 0);
+    P.legR = limb(0.08, 0.86, khaki, 'cloth', 0.11, 0.86, 0);
+    for (const L of [P.legL, P.legR]) L.add(rb(0.16, 0.12, 0.27, 0x3b2a1a, 'rubber', 0, -0.81, -0.04, 0.03));
+    body.add(P.legL, P.legR);
+    body.add(rb(0.44, 0.62, 0.26, tc, 'cloth', 0, 1.18, 0, 0.06));
+    body.add(rb(0.47, 0.42, 0.29, olive, 'cloth', 0, 1.24, 0, 0.05));
+    body.add(rb(0.12, 0.42, 0.02, tc, 'cloth', 0, 1.24, -0.146, 0.005)); // shirt between the vest flaps
+    for (const sx of [-1, 1]) body.add(rb(0.1, 0.09, 0.05, 0x3d4628, 'cloth', sx * 0.13, 1.12, -0.16, 0.015));
+    body.add(rb(0.47, 0.06, 0.29, 0x2b1d12, 'glossy', 0, 0.9, 0, 0.02));
+    body.add(cyl(0.065, 0.065, 0.08, SKIN, 'skin', 0, 1.52, 0));
+    body.add(rb(0.26, 0.28, 0.26, SKIN, 'skin', 0, 1.66, 0));
+    body.add(rb(0.23, 0.055, 0.02, 0x111111, 'glossy', 0, 1.69, -0.132, 0.01)); // sunglasses
+    body.add(rb(0.2, 0.05, 0.03, 0x6b4a2a, 'cloth', 0, 1.57, -0.125, 0.01)); // stubble
+    body.add(cyl(0.27, 0.27, 0.025, khaki, 'cloth', 0, 1.8, 0));
+    body.add(cyl(0.14, 0.155, 0.14, khaki, 'cloth', 0, 1.87, 0));
+    body.add(cyl(0.157, 0.157, 0.04, tc, 'cloth', 0, 1.83, 0));
+    P.armL = limb(0.06, 0.66, tc, 'cloth', -0.29, 1.46, 0);
+    P.armR = limb(0.06, 0.66, tc, 'cloth', 0.29, 1.46, 0);
+    for (const A of [P.armL, P.armR]) A.add(sph(0.065, 0x4a3a28, 'cloth', 0, -0.64, 0));
+    body.add(P.armL, P.armR);
   } else {
     // Spy: small and slim, balaclava, fedora, suit and tie
     const suit = 0x22222a;
@@ -395,7 +446,7 @@ export function buildCharacter(char, team) {
   }
   // Weapon holder at the right hand
   P.hand = new THREE.Group();
-  const armLen = { longman: 0.78, builder: 0.62, doctor: 0.56, spy: 0.5 }[char];
+  const armLen = { longman: 0.78, builder: 0.62, doctor: 0.56, spy: 0.5, sniper: 0.66 }[char];
   P.hand.position.set(0, -armLen + 0.05, 0);
   P.armR.add(P.hand);
   if (P.lensMat) P.lensMat.userData.keep = true;
@@ -408,8 +459,8 @@ export function buildCharacter(char, team) {
 // First-person arm: sleeve + hand, weapon attached at the hand
 export function buildViewArm(char, team) {
   const g = new THREE.Group();
-  const sleeve = { longman: TEAM_COLORS[team], builder: TEAM_COLORS[team], doctor: METAL, spy: TEAM_COLORS[team] }[char];
-  const glove = { longman: 0x5a3a22, builder: 0xd9a441, doctor: 0x9aa3ad, spy: 0x1a1a1f }[char];
+  const sleeve = { longman: TEAM_COLORS[team], builder: TEAM_COLORS[team], doctor: METAL, spy: TEAM_COLORS[team], sniper: TEAM_COLORS[team] }[char];
+  const glove = { longman: 0x5a3a22, builder: 0xd9a441, doctor: 0x9aa3ad, spy: 0x1a1a1f, sniper: 0x4a3a28 }[char];
   const arm = part(capsuleGeo(0.05, 0.4), mat(sleeve, char === 'doctor' ? 'metal' : 'cloth'), 0, -0.03, 0.3, false);
   arm.rotation.x = Math.PI / 2;
   g.add(arm);

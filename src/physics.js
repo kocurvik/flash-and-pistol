@@ -72,6 +72,8 @@ export function stepMovement(e, def, input, dt, solids, ownTowerId, bounds = DEF
 
   let speed = def.speed * (e.crouch ? GAME.crouchSpeedScale : 1);
   if (e.buildT > 0) speed *= 0.5;
+  // Sniper looking through his scope (input.special held with the rifle out)
+  if (def.scopeSpeedScale && input.special && e.weapon === def.primary) speed *= def.scopeSpeedScale;
   const f = forwardVec(e.yaw);
   const rx = -f.z, rz = f.x; // right vector
   let wx = f.x * input.fwd + rx * input.right;

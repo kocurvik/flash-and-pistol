@@ -12,6 +12,10 @@ export const WEAPONS = {
   knife:   { name: 'Knife',   damage: 1, backstab: 2, cooldown: 0.5, range: 1.9, arc: 40, kind: 'cone', anim: 'stab' },
   // Builder's tower gun: only usable while standing on top of his own tower
   nailgun: { name: 'Nail gun', damage: 1, cooldown: 0.8, kind: 'gun', anim: 'shoot' },
+  // Sniper: 'hitscan' hits the first thing along the aim line; ammo is per life.
+  // 'arrow' fires a projectile that drops (range is only how far bots shoot it).
+  rifle:   { name: 'Sniper rifle', damage: 2, cooldown: 1.6, range: 80, ammo: 5, kind: 'hitscan', anim: 'shoot' },
+  bow:     { name: 'Bow', damage: 1, cooldown: 1.1, range: 30, kind: 'arrow', anim: 'shoot' },
 };
 
 export const CHARACTERS = {
@@ -51,9 +55,19 @@ export const CHARACTERS = {
     cloakEvery: 3, cloakFlicker: 0.5,
     blurb: 'Invisible, but flickers into view for 0.5 s every 3 s. Starts with only fists (1♥). {special} steals an enemy weapon to fight with.',
   },
+  sniper: {
+    name: 'Sniper', role: 'Marksman', hearts: 3, speed: 4.6,
+    height: 1.8, radius: 0.4, eye: 1.62,
+    primary: 'rifle', backup: 'bow', special: 'scope',
+    // Hold the special to look through the rifle's scope: zoomed in, slower, and
+    // enemy Spies in view show up. Bots only spot Spies inside scopeAngle (half-angle, degrees).
+    scopeZoom: 4, scopeSpeedScale: 0.5, scopeAngle: 12,
+    arrowSpeed: 32, arrowGravity: -9,
+    blurb: 'Sniper rifle: 2♥ but only 5 bullets. Hold {special} to scope in and see Spies. Bow: 1♥, shoots faster, arrows drop.',
+  },
 };
 
-export const CHARACTER_ORDER = ['longman', 'builder', 'doctor', 'spy'];
+export const CHARACTER_ORDER = ['longman', 'builder', 'doctor', 'spy', 'sniper'];
 
 export const GAME = {
   teamSize: 4,            // 1..6, bots fill empty slots
@@ -103,5 +117,7 @@ export const TEAM_COLORS = { yellow: 0xf2c418, teal: 0x1fb5ad };
 export const TEAM_NAMES = { yellow: 'Yellow', teal: 'Teal' };
 
 export function projectileGravity(type) {
-  return type === 'nail' ? CHARACTERS.builder.nailGravity : GAME.bottleGravity;
+  if (type === 'nail') return CHARACTERS.builder.nailGravity;
+  if (type === 'arrow') return CHARACTERS.sniper.arrowGravity;
+  return GAME.bottleGravity;
 }

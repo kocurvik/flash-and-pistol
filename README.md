@@ -1,7 +1,7 @@
 # Flash and Pištol
 
-A tiny 3D first-person team brawler for the browser: Yellow vs Teal, four characters
-(Longman, Builder, Doctor, Spy), best of 5 rounds, two maps. Design: [spec.md](spec.md).
+A tiny 3D first-person team brawler for the browser: Yellow vs Teal, five characters
+(Longman, Builder, Doctor, Spy, Sniper), best of 5 rounds, two maps. Design: [spec.md](spec.md).
 
 ## Play in the browser
 
@@ -56,7 +56,7 @@ Pick the map on the main menu; when hosting, the host can change it in the lobby
   a chest of gems in its base. Walk over the enemy treasure to pick it up, and bring it into
   the ring around your own chest to win the round. A carrier who dies drops the treasure;
   teammates of its owners send it home by walking over it, otherwise it returns after 20 s.
-  Everyone respawns 5 s after dying, and can press 1–4 while waiting to switch character.
+  Everyone respawns 5 s after dying, and can press 1–5 while waiting to switch character.
 
 ## Controls
 
@@ -64,13 +64,13 @@ Pick the map on the main menu; when hosting, the host can change it in the lobby
 | --- | --- |
 | Move / look | W A S D / mouse |
 | Attack (hold to repeat) | Left click |
-| Special: medkit, build tower (hold), throw bottle, steal | Right click or E |
+| Special: medkit, build tower (hold), throw bottle, steal, scope (hold) | Right click or E |
 | Jump (Doctor: double jump) | Space |
 | Crouch | Shift or C (avoid Ctrl: Ctrl+W closes the tab) |
 | Collapse your tower (Builder, standing on it) | Shift + Space |
 | Flashlight (Longman) | F |
 | Switch weapon | 1 / 2 / mouse wheel |
-| Pick character (pick screen, or while respawning in the cave) | 1 – 4 |
+| Pick character (pick screen, or while respawning in the cave) | 1 – 5 |
 
 All of these except Esc and the pick keys can be changed under **Change controls** on the main
 menu, or **Controls** in the pause menu. Each action can have two keys or mouse buttons.
@@ -89,6 +89,11 @@ menu, or **Controls** in the pause menu. Each action can have two keys or mouse 
   1 heart, every 0.8 s). Nails only hurt enemies 5–20 m from the tower's base. A ring on the
   ground marks the 5 m blind spot, where nails bounce off. So shoot enemies at range, and
   collapse the tower when they rush inside the ring.
+- **Sniper.** A fifth character (3 hearts, 4.6 m/s, a bit faster than Longman). His sniper
+  rifle hits instantly for 2 hearts, fires every 1.6 s and has only 5 bullets per life;
+  when they run out he switches to his bow (1 heart, every 1.1 s, arrows drop). Holding
+  right click looks through the rifle's scope: 4× zoom, half walking speed, and enemy
+  Spies in view show up for him alone. A Spy who steals the rifle gets the bullets left in it.
 
 All of these numbers live in `src/config.js`. `node tools/rules-test.mjs` checks them.
 
@@ -115,7 +120,7 @@ No build step: plain ES modules, served as-is.
 ```
 node tools/headless-test.mjs 10 4 hard   # 10 bot-only matches, prints balance stats
 node tools/headless-test.mjs 4 4 normal cave   # the same in the Crystal Cave
-node tools/rules-test.mjs                # checks Spy cloak, last stand, nail gun and treasure rules
+node tools/rules-test.mjs                # checks Spy cloak, last stand, nail gun, Sniper and treasure rules
 node tools/relay-test.mjs 8080           # smoke test for the running relay server
 node tools/p2p-test.mjs                  # hosts and joins by game code in two headless Chrome windows (needs internet)
 node tools/browser-test.mjs <outDir>     # drives headless Chrome, saves screenshots

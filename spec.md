@@ -33,6 +33,7 @@ Each character has one primary weapon, one backup weapon and one special. All nu
 | Builder | Area control | 5 | 5.5 | Wrench | Fists *(assumption)* | Collapsing tower |
 | Doctor | Healer | 3 | 7.2 | Axe | Kick *(assumption)* | Healing bottle |
 | Spy | Thief / assassin | 2 | 6.5 | Fists | none | Invisibility, steal weapon |
+| Sniper | Marksman | 3 *(assumption)* | 4.6 | Sniper rifle | Bow | Scope |
 
 ### Longman
 
@@ -70,6 +71,16 @@ Invisible for the whole game, but fragile. Strong when used cleverly, risky to p
 - **Using stolen weapons:** the Spy can use the last weapon he stole instead of his fists *(assumption: makes stealing rewarding)*.
 - **Fists:** the Spy starts with only his fists: 1 heart damage, 0.5 s between punches, no backstab bonus. Stealing is how he gets a real weapon.
 - Spies cannot steal from other Spies.
+
+### Sniper
+
+Added after the first playtests. Picks enemies off from far away, but a limited magazine keeps him from owning the map.
+
+- **Movement:** slightly faster than Longman (4.6 m/s).
+- **Sniper rifle (primary):** hits instantly along the aim line for 2 hearts. Slow: 1.6 s between shots *(assumption)*. Only 5 bullets per life; when they run out he switches to the bow.
+- **Bow (backup):** 1 heart damage, slightly faster (1.1 s between shots *(assumption)*). Arrows fly at 32 m/s and drop, so far shots need aiming high.
+- **Scope:** hold the special key (right click) with the rifle out to look through its scope: 4× zoom, half walking speed *(assumption)*. While scoped in, the Sniper sees enemy Spies in his view, so he is a second Spy counter next to Longman's flashlight. Only the Sniper sees them.
+- **Stolen rifle:** a Spy who steals it gets the bullets left in it and drops it when it is empty. An empty rifle cannot be stolen. A Spy cannot scope (his special key steals).
 
 ## Balance notes
 

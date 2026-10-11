@@ -151,6 +151,16 @@ export class Audio {
         this.noise(o, { t: 0.06, vol: 0.5, type: 'highpass', f0: 2500 });
         this.tone(o, { type: 'square', f0: 900, f1: 300, t: 0.06, vol: 0.12 });
         break;
+      case 'snipe':
+        // Sharp crack with a low boom behind it
+        this.noise(o, { t: 0.09, vol: 0.8, type: 'highpass', f0: 1800 });
+        this.noise(o, { t: 0.7, vol: 0.5, type: 'lowpass', f0: 700, f1: 80 });
+        this.tone(o, { type: 'sine', f0: 120, f1: 40, t: 0.35, vol: 0.4 });
+        break;
+      case 'bow':
+        this.tone(o, { type: 'triangle', f0: 260, f1: 140, t: 0.18, vol: 0.25 });
+        this.noise(o, { t: 0.12, vol: 0.15, f0: 1500, f1: 600, q: 2 });
+        break;
       case 'nailHit': this.tone(o, { type: 'square', f0: 1800, f1: 1200, t: 0.04, vol: 0.08 }); break;
       case 'deflect': this.tone(o, { type: 'triangle', f0: 2400, f1: 3000, t: 0.12, vol: 0.15 }); break;
       case 'shimmer': this.tone(o, { type: 'sine', f0: 1200, f1: 1800, t: 0.35, vol: 0.12 }); break;

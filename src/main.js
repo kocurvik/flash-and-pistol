@@ -371,7 +371,7 @@ function renderControlsList() {
     [['forward', 'left', 'back', 'right'].map((id) => input.label(id)).join(' '), 'Move'],
     ['Mouse', 'Look'],
     [keys('attack'), 'Attack (hold to keep swinging)'],
-    [keys('special'), 'Special: medkit, build tower, throw bottle, steal'],
+    [keys('special'), 'Special: medkit, build tower, throw bottle, steal, scope (hold)'],
     [keys('jump'), 'Jump (Doctor: double jump)'],
     [keys('crouch'), 'Crouch (Builder on his tower: collapse it!)'],
     [keys('flash'), 'Longman flashlight (reveals Spies)'],
@@ -499,8 +499,8 @@ function renderPick(view, me) {
     if (el.textContent !== txt) el.textContent = txt;
   }
   const foot = me.pick
-    ? `You picked <b>${CHARACTERS[me.pick].name}</b>. Waiting for the others… (press 1–4 to change)`
-    : 'Click a character or press 1–4. At most 2 of the same character per team.';
+    ? `You picked <b>${CHARACTERS[me.pick].name}</b>. Waiting for the others… (press 1–5 to change)`
+    : 'Click a character or press 1–5. At most 2 of the same character per team.';
   if ($('pick-foot').innerHTML !== foot) $('pick-foot').innerHTML = foot;
 }
 
@@ -578,7 +578,7 @@ function handleEvents(evs) {
         else hud.feed(`${hud.name(victim)} <span class="muted">was crushed by their own tower</span>`, ev.victim === myId);
         if (ev.victim === myId) {
           const by = killer && killer !== victim ? `Taken out by ${hud.name(killer)}. ` : '';
-          if (view.mode === 'ctf') hud.message('You are out!', `${by}Back in ${GAME.respawnTime} s · press 1–4 to switch character.`, 3);
+          if (view.mode === 'ctf') hud.message('You are out!', `${by}Back in ${GAME.respawnTime} s · press 1–5 to switch character.`, 3);
           else hud.message('You are out!', `${by}You can pick again next round.`, 3);
           G.specIdx = 0;
         } else if (ev.killer === myId) {
@@ -617,6 +617,17 @@ function handleEvents(evs) {
         renderer.burst(ev.x, ev.y, ev.z, 0x8a5a2b, 6, 2, 0.1);
         break;
       case 'throw': audio.play('throw', ev.id === myId ? null : pos); break;
+      case 'snipe':
+        audio.play('snipe', ev.id === myId ? null : ev, 1);
+        renderer.tracer(ev.x, ev.y, ev.z, ev.hx, ev.hy, ev.hz);
+        if (ev.hit) renderer.burst(ev.hx, ev.hy, ev.hz, 0xd9d2c0, 5, 2, 0.05, 0.4);
+        if (ev.id === myId) G.shake = Math.max(G.shake, 0.12);
+        break;
+      case 'bow': audio.play('bow', ev.id === myId ? null : pos, 0.8); break;
+      case 'empty':
+        audio.play('click', ev.id === myId ? null : pos);
+        if (ev.id === myId) hud.flashHint(me && me.char === 'sniper' ? 'Out of bullets! Switched to your bow.' : 'The stolen rifle is empty!', 2);
+        break;
       case 'shoot': audio.play('shoot', ev.id === myId ? null : pos, 0.8); break;
       case 'nailHit':
         audio.play('nailHit', ev, 0.8);
@@ -763,6 +774,11 @@ function computeHint(view, me) {
     case 'longman':
       if (me.hearts <= me.maxHearts - 2 && me.specialCd <= 0) return `${K('special')}: Medkit (+2♥)`;
       return `${K('flash')}: flashlight reveals invisible Spies in its beam`;
+    case 'sniper':
+      if (!me.hasPrimary) return `Your rifle was stolen! Keep shooting with your bow (arrows drop: aim high)`;
+      if (me.weapon === 'bow') return me.ammo > 0 ? `Bow: arrows drop, aim high · ${K('weapon1')}: sniper rifle (${me.ammo} bullets left)` : 'Out of bullets: bow only. Arrows drop, aim high';
+      if (localScoped(me)) return `Scoped in: Spies show up · ${me.ammo} bullet${me.ammo === 1 ? '' : 's'} left`;
+      return `Hold ${K('special')} to scope in (reveals Spies) · ${K('attack')}: shoot (2♥, ${me.ammo} bullet${me.ammo === 1 ? '' : 's'} left)`;
     case 'doctor':
       if (!me.hasPrimary) return `Your axe was stolen! Kick enemies, and keep throwing healing bottles (${K('special')})`;
       return `Hit teammates with your axe to heal them · ${K('special')}: healing bottle · double jump!`;
@@ -771,6 +787,14 @@ function computeHint(view, me) {
 }
 
 // ---------- Camera ----------
+
+// Looking through the Sniper's scope. Decided locally so the zoom reacts at once;
+// the host makes the same decision for the reveal and the slower walk.
+function localScoped(me) {
+  const view = G.view;
+  return !!(me && me.alive && view && view.phase === 'play' && me.char === 'sniper' && me.weapon === CHARACTERS.sniper.primary &&
+    me.ammo > 0 && (input.locked || input.forceActive) && input.action('special'));
+}
 
 function spectateTargets(view, me) {
   const mates = view.entities.filter((e) => e.alive && e.team === me.team && e.id !== me.id);
@@ -882,7 +906,7 @@ function frame(now) {
   // Mouse look
   const look = input.takeLook();
   if (input.locked && me && me.alive && PLAY_PHASES.includes(phase)) {
-    const k = 0.0022 * settings.sens;
+    const k = 0.0022 * settings.sens / (localScoped(me) ? CHARACTERS.sniper.scopeZoom : 1);
     G.yaw -= look.dx * k;
     G.pitch = Math.max(-1.5, Math.min(1.5, G.pitch - look.dy * k));
   }
@@ -933,9 +957,11 @@ function frame(now) {
   }
   audio.listener = { x: camInfo.cam.x, y: camInfo.cam.y, z: camInfo.cam.z, yaw: camInfo.cam.yaw };
   const renderView = G.view || { entities: [], towers: [], projectiles: [], phase: 'lobby' };
+  const scoped = camInfo.firstPerson && localScoped(meNow);
   renderer.render(renderView, {
     localId: G.localId, viewerTeam: meNow ? meNow.team : null,
     camera: camInfo.cam, firstPerson: camInfo.firstPerson && PLAY_PHASES.includes(ph), time: G.time,
+    zoom: scoped ? CHARACTERS.sniper.scopeZoom : 1, scoped,
   }, dt);
 
   // Screens + HUD
@@ -953,6 +979,7 @@ function frame(now) {
       spectating: camInfo.spectating,
       hint: computeHint(G.view, meNow),
       showScores: G.showScores || ph === 'roundEnd',
+      scoped,
     }, dt);
     if (G.pauseOpen) {
       $('pause-title').textContent = G.mode === 'offline' ? 'Paused' : 'Menu (the game keeps running)';

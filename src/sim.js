@@ -4,7 +4,7 @@ import { CHARACTERS, CHARACTER_ORDER, WEAPONS, GAME, TEAMS, projectileGravity } 
 import { buildMap } from './map.js';
 import {
   stepMovement, buildNav, towerBox, lookDir, forwardVec, yawTo, angleDiff,
-  lineClear, raycast, overlapsBox, entityHeight,
+  lineClear, raycast, rayBox, overlapsBox, entityHeight,
 } from './physics.js';
 import { BotBrain } from './bots.js';
 
@@ -71,7 +71,7 @@ export class Sim {
       flashlight: false, flickerT: 0, revealed: false,
       attackSeq: 0, spawnSeq: 0, kills: 0, deaths: 0, heals: 0,
       lastHurtT: -99, lastAttacker: null, towerId: null, deathT: 0, respawnT: 0, captures: 0,
-      cloakT: 0, onTower: false, prevWeapon: null,
+      cloakT: 0, onTower: false, prevWeapon: null, ammo: 0, scoped: false,
       input: emptyInput(), net: { spc: 0, flc: 0, pdc: 0 },
       brain: null,
     };
@@ -225,10 +225,11 @@ export class Sim {
     const team = this.teamMembers(e.team);
     const counts = {};
     for (const c of CHARACTER_ORDER) counts[c] = team.filter((o) => o !== e && o.pick === c).length;
-    const weights = { longman: 3, builder: 3, doctor: 3, spy: 2 };
+    const weights = { longman: 3, builder: 3, doctor: 3, spy: 2, sniper: 2 };
     if (counts.doctor === 0) weights.doctor += 4;
     if (counts.longman === 0) weights.longman += 3;
     if (counts.spy >= 1) weights.spy = 0.3;
+    if (counts.sniper >= 1) weights.sniper = 0.5;
     let best = null, bw = -1;
     for (const c of CHARACTER_ORDER) {
       if (!this.canPick(e, c)) continue;
@@ -294,6 +295,7 @@ export class Sim {
     e.buildT = 0; e.flashlight = false; e.flickerT = 0; e.revealed = false;
     e.towerId = null; e.pounding = false; e.climbing = false; e.crouch = false;
     e.cloakT = 0; e.onTower = false; e.prevWeapon = null;
+    e.ammo = WEAPONS[def.primary].ammo || 0; e.scoped = false;
     e.pos = { x: sp.x, y: sp.y, z: sp.z };
     e.vel = { x: 0, y: 0, z: 0 };
     e.yaw = sp.yaw; e.pitch = 0;
@@ -476,6 +478,12 @@ export class Sim {
       case 'steal':
         if (inp.specialPressed && e.specialCd <= 0) this.trySteal(e, def);
         break;
+      case 'scope':
+        e.scoped = !!inp.special && e.weapon === def.primary;
+        if (inp.specialPressed && !e.scoped) {
+          this.fail(e, !e.hasPrimary ? 'Your rifle was stolen: no scope' : e.ammo <= 0 ? 'Out of rifle ammo: no scope' : 'Switch to the sniper rifle to scope in');
+        }
+        break;
     }
   }
 
@@ -486,6 +494,7 @@ export class Sim {
     let w = null;
     if (def.special === 'steal') w = slot === 1 ? def.primary : e.stolen;
     else w = slot === 1 ? (e.hasPrimary ? def.primary : null) : def.backup;
+    if (w && WEAPONS[w].ammo && e.ammo <= 0) { this.fail(e, `Out of ${WEAPONS[w].name} ammo`); return; }
     if (w && w !== e.weapon) {
       e.weapon = w;
       e.slot = slot;
@@ -536,10 +545,13 @@ export class Sim {
   attack(e, def) {
     const w = WEAPONS[e.weapon];
     if (!w) return;
+    if (w.ammo && e.ammo <= 0) { this.outOfAmmo(e); return; }
     e.attackCd = w.cooldown;
     e.attackSeq++;
     if (def.special === 'steal') e.flickerT = Math.max(e.flickerT, def.flickerTime);
     if (w.kind === 'gun') { this.fireNail(e); return; }
+    if (w.kind === 'hitscan') { this.fireRifle(e, w); return; }
+    if (w.kind === 'arrow') { this.fireArrow(e); return; }
     this.emit({ type: 'swing', id: e.id, weapon: e.weapon });
     const range = w.range + (e.remote ? 0.3 : 0);
     let hitSomething = false;
@@ -619,6 +631,7 @@ export class Sim {
     o.deathT = this.time;
     o.flashlight = false;
     o.buildT = 0;
+    o.scoped = false;
     if (attacker && attacker !== o) attacker.kills++;
     this.emit({ type: 'kill', victim: o.id, killer: attacker ? attacker.id : null, cause, x: o.pos.x, y: o.pos.y, z: o.pos.z });
     if (o.towerId !== null) {
@@ -638,11 +651,13 @@ export class Sim {
   }
 
   trySteal(e, def) {
-    const t = this.coneTarget(e, def.stealRange, 50, (o) => o.team !== e.team && o.char !== 'spy' && o.hasPrimary);
+    const t = this.coneTarget(e, def.stealRange, 50, (o) => o.team !== e.team && o.char !== 'spy' && o.hasPrimary &&
+      !(WEAPONS[CHARACTERS[o.char].primary].ammo && o.ammo <= 0));
     if (!t) { this.fail(e, 'No enemy weapon in reach'); return; }
     const tdef = CHARACTERS[t.char];
     const w = tdef.primary;
     t.hasPrimary = false;
+    t.scoped = false;
     if (t.onTower) t.prevWeapon = tdef.backup; // keeps the nail gun while up there
     else t.weapon = tdef.backup;
     t.slot = 2;
@@ -650,6 +665,8 @@ export class Sim {
     t.attackCd = Math.max(t.attackCd, 0.3);
     e.stolen = w;
     e.weapon = w;
+    e.ammo = t.ammo; // a stolen rifle keeps the bullets left in it
+    t.ammo = 0;
     e.slot = 2;
     e.specialCd = e.specialMax = def.stealCooldown;
     e.flickerT = Math.max(e.flickerT, def.flickerTime);
@@ -736,7 +753,8 @@ export class Sim {
       p.life -= dt;
       p.vy += projectileGravity(p.type) * dt;
       const nail = p.type === 'nail';
-      const steps = nail ? 6 : 3;
+      const dart = nail || p.type === 'arrow'; // hurts what it hits; bottles splash
+      const steps = dart ? 6 : 3;
       let hit = false, victim = null;
       for (let s = 0; s < steps && !hit; s++) {
         p.x += p.vx * dt / steps; p.y += p.vy * dt / steps; p.z += p.vz * dt / steps;
@@ -745,14 +763,15 @@ export class Sim {
         if (this.solids.some((b) => overlapsBox(p.x, p.y - 0.08, p.z, 0.08, 0.16, b))) { hit = true; break; }
         for (const o of this.entities) {
           if (!o.alive || o.id === p.owner) continue;
-          if (nail && o.team === p.team) continue; // nails fly past teammates
+          if (dart && o.team === p.team) continue; // nails and arrows fly past teammates
           const od = CHARACTERS[o.char];
           if (Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < od.radius + 0.1 && p.y > o.pos.y && p.y < o.pos.y + entityHeight(o, od)) { hit = true; victim = o; break; }
         }
       }
-      if (nail) {
-        const far = Math.hypot(p.x - p.tx, p.z - p.tz) > CHARACTERS.builder.nailMaxRange;
-        if (victim) this.nailHit(p, victim);
+      if (dart) {
+        const far = nail && Math.hypot(p.x - p.tx, p.z - p.tz) > CHARACTERS.builder.nailMaxRange;
+        if (victim && nail) this.nailHit(p, victim);
+        else if (victim) this.damage(victim, WEAPONS.bow.damage, this.get(p.owner), 'bow');
         else if (hit) this.emit({ type: 'nailHit', x: p.x, y: p.y, z: p.z });
         if (!hit && !far && p.life > 0) keep.push(p);
         continue;
@@ -777,6 +796,62 @@ export class Sim {
       life: 2, tx: t.x, tz: t.z,
     });
     this.emit({ type: 'shoot', id: e.id });
+  }
+
+  // Hitscan: the bullet hits the first wall, tower or enemy along the aim line.
+  // Teammates don't block it (no friendly fire).
+  fireRifle(e, w) {
+    e.ammo = Math.max(0, e.ammo - 1);
+    const eye = this.eye(e);
+    const d = lookDir(e.yaw, e.pitch);
+    const wall = raycast(eye.x, eye.y, eye.z, d.x, d.y, d.z, w.range, this.solids);
+    let t = wall.t, victim = null;
+    for (const o of this.entities) {
+      if (o === e || !o.alive || o.team === e.team) continue;
+      const od = CHARACTERS[o.char];
+      const r = od.radius;
+      const box = { min: [o.pos.x - r, o.pos.y, o.pos.z - r], max: [o.pos.x + r, o.pos.y + entityHeight(o, od), o.pos.z + r] };
+      if (e.remote) {
+        // A remote player sees others ~0.15 s in the past: also count where the target just was
+        const px = o.pos.x - o.vel.x * 0.15, pz = o.pos.z - o.vel.z * 0.15;
+        box.min[0] = Math.min(box.min[0], px - r); box.max[0] = Math.max(box.max[0], px + r);
+        box.min[2] = Math.min(box.min[2], pz - r); box.max[2] = Math.max(box.max[2], pz + r);
+      }
+      const ot = rayBox(eye.x, eye.y, eye.z, d.x, d.y, d.z, box, t);
+      if (ot < t) { t = ot; victim = o; }
+    }
+    this.emit({
+      type: 'snipe', id: e.id, x: eye.x, y: eye.y - 0.1, z: eye.z,
+      hx: r2(eye.x + d.x * t), hy: r2(eye.y + d.y * t), hz: r2(eye.z + d.z * t), hit: !!victim || !!wall.box,
+    });
+    if (victim) this.damage(victim, w.damage, e, e.weapon);
+    else if (wall.box && t === wall.t && wall.box.tower != null) {
+      const tw = this.towers.find((tt) => tt.id === wall.box.tower);
+      if (tw && tw.team !== e.team) this.damageTower(tw, w.damage, e);
+    }
+    if (e.ammo <= 0) this.outOfAmmo(e);
+  }
+
+  // Empty gun: the Sniper falls back to his bow, a Spy drops the stolen rifle
+  outOfAmmo(e) {
+    const def = CHARACTERS[e.char];
+    e.scoped = false;
+    if (def.special === 'steal') { e.stolen = null; e.weapon = def.primary; e.slot = 1; }
+    else { e.weapon = def.backup; e.slot = 2; }
+    this.emit({ type: 'empty', id: e.id });
+  }
+
+  fireArrow(e) {
+    const def = CHARACTERS.sniper;
+    const d = lookDir(e.yaw, e.pitch);
+    const eye = this.eye(e);
+    this.projectiles.push({
+      id: this.nextId++, type: 'arrow', team: e.team, owner: e.id,
+      x: eye.x + d.x * 0.6, y: eye.y + d.y * 0.6 - 0.1, z: eye.z + d.z * 0.6,
+      vx: d.x * def.arrowSpeed, vy: d.y * def.arrowSpeed, vz: d.z * def.arrowSpeed,
+      life: 3,
+    });
+    this.emit({ type: 'bow', id: e.id });
   }
 
   // Nails only hurt enemies outside the tower's blind spot
@@ -1004,6 +1079,18 @@ export class Sim {
     return false;
   }
 
+  // Looking through the Sniper's scope shows Spies inside its narrow view.
+  // Only the Sniper himself sees them (the renderer does the same for players).
+  inScope(viewer, target) {
+    if (!viewer.scoped || !viewer.alive) return false;
+    const def = CHARACTERS[viewer.char];
+    const eye = this.eye(viewer), c = this.chest(target);
+    const L = lookDir(viewer.yaw, viewer.pitch);
+    const dx = c.x - eye.x, dy = c.y - eye.y, dz = c.z - eye.z;
+    const d = Math.hypot(dx, dy, dz) || 1;
+    return (dx * L.x + dy * L.y + dz * L.z) / d > Math.cos(def.scopeAngle * DEG);
+  }
+
   updateReveals() {
     const lights = this.entities.filter((e) => e.alive && e.flashlight);
     for (const e of this.entities) {
@@ -1015,7 +1102,7 @@ export class Sim {
   // Can `viewer` see `target`? Used by bots (and matches what the renderer shows).
   canSee(viewer, target, maxDist = 40) {
     if (!target.alive) return false;
-    if (target.char === 'spy' && target.team !== viewer.team && !target.revealed) return false;
+    if (target.char === 'spy' && target.team !== viewer.team && !target.revealed && !this.inScope(viewer, target)) return false;
     const a = this.eye(viewer), b = this.chest(target);
     if (Math.hypot(a.x - b.x, a.z - b.z) > maxDist) return false;
     return lineClear(a, b, this.solids);
@@ -1072,7 +1159,7 @@ export class Sim {
         flashlight: e.flashlight, flickerT: r2(e.flickerT), revealed: e.revealed,
         attackSeq: e.attackSeq, spawnSeq: e.spawnSeq, kills: e.kills, deaths: e.deaths, heals: e.heals,
         towerId: e.towerId, lastHurtT: r2(e.lastHurtT), cloakT: r2(e.cloakT), onTower: e.onTower,
-        respawnT: r2(e.respawnT), captures: e.captures,
+        respawnT: r2(e.respawnT), captures: e.captures, ammo: e.ammo, scoped: e.scoped,
       })),
       towers: this.towers.map((t) => ({ ...t })),
       projectiles: this.projectiles.map((p) => ({ id: p.id, type: p.type, team: p.team, x: r2(p.x), y: r2(p.y), z: r2(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz) })),

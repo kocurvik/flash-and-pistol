@@ -321,7 +321,7 @@ export class ClientView {
       const isMe = se.id === this.myId;
       for (const k of ['name', 'team', 'isBot', 'char', 'pick', 'alive', 'hearts', 'maxHearts', 'weapon', 'slot', 'hasPrimary', 'stolen',
         'attackCd', 'specialCd', 'specialMax', 'buildT', 'flashlight', 'flickerT', 'revealed', 'attackSeq', 'kills', 'deaths', 'heals', 'towerId', 'lastHurtT',
-        'cloakT', 'onTower', 'respawnT', 'captures']) {
+        'cloakT', 'onTower', 'respawnT', 'captures', 'ammo', 'scoped']) {
         e[k] = se[k];
       }
       if (isMe) {

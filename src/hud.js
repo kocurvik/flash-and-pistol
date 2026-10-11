@@ -5,8 +5,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const tcls = (team) => (team === 'yellow' ? 'ty' : 'tt');
 
-export const CHAR_ICONS = { longman: '🔦', builder: '🔧', doctor: '🧪', spy: '🕶️' };
-const SPECIAL_NAMES = { medkit: 'Medkit', tower: 'Tower', bottle: 'Healing bottle', steal: 'Steal weapon' };
+export const CHAR_ICONS = { longman: '🔦', builder: '🔧', doctor: '🧪', spy: '🕶️', sniper: '🎯' };
+const SPECIAL_NAMES = { medkit: 'Medkit', tower: 'Tower', bottle: 'Healing bottle', steal: 'Steal weapon', scope: 'Scope (hold)' };
 
 export class HUD {
   constructor(input) {
@@ -103,7 +103,8 @@ export class HUD {
     const alivePlayer = me && me.alive;
     $('status').classList.toggle('hidden', !alivePlayer);
     $('loadout').classList.toggle('hidden', !alivePlayer);
-    $('crosshair').classList.toggle('hidden', !alivePlayer);
+    $('crosshair').classList.toggle('hidden', !alivePlayer || !!ctx.scoped);
+    $('scope').classList.toggle('hidden', !(alivePlayer && ctx.scoped));
     $('invis').classList.toggle('hidden', !(alivePlayer && me.char === 'spy'));
     if (alivePlayer) {
       const def = CHARACTERS[me.char];
@@ -122,7 +123,7 @@ export class HUD {
     // Spectating label
     let spec = ctx.spectating ? `Spectating ${this.name(ctx.spectating)} · click to switch` : (me && !me.alive && view.phase === 'play' ? 'You are out until the next round' : '');
     if (view.mode === 'ctf' && me && !me.alive && view.phase === 'play') {
-      spec = me.pick ? `Back in ${Math.max(1, Math.ceil(me.respawnT || 0))} s as ${CHAR_ICONS[me.pick]} ${CHARACTERS[me.pick].name} · 1–4 to switch` : '';
+      spec = me.pick ? `Back in ${Math.max(1, Math.ceil(me.respawnT || 0))} s as ${CHAR_ICONS[me.pick]} ${CHARACTERS[me.pick].name} · 1–5 to switch` : '';
     }
     this.set('spectate', spec);
 
@@ -171,13 +172,21 @@ export class HUD {
     }
     let html = '';
     for (const s of slots) {
-      const name = s.ok ? WEAPONS[s.w].name : `<s>${WEAPONS[s.w].name}</s> stolen!`;
+      const W = WEAPONS[s.w];
+      let name = s.ok ? W.name : `<s>${W.name}</s> stolen!`;
+      if (s.ok && W.ammo) name += me.ammo > 0 ? ` · ${'▮'.repeat(me.ammo)}<span style="opacity:.3">${'▮'.repeat(Math.max(0, W.ammo - me.ammo))}</span>` : ' · empty';
       html += `<div class="slot${me.weapon === s.w && s.ok ? ' active' : ''}${s.stolen ? ' stolen' : ''}"><span class="k">${this.key(s.k === 1 ? 'weapon1' : 'weapon2')}</span>${name}</div>`;
     }
     const ready = me.specialCd <= 0;
     let label = SPECIAL_NAMES[def.special];
     let pct = ready ? 100 : 100 * (1 - me.specialCd / (me.specialMax || 1));
     let state = ready ? 'ready' : `${Math.ceil(me.specialCd)}s`;
+    if (def.special === 'scope') {
+      pct = 100;
+      state = me.scoped ? 'ON' : 'ready';
+      if (!me.hasPrimary) { state = 'rifle stolen'; pct = 0; }
+      else if (me.ammo <= 0) { state = 'no ammo'; pct = 0; }
+    }
     if (def.special === 'tower') {
       if (!me.hasPrimary) { state = 'needs wrench'; pct = 0; }
       else if (me.towerId !== null && me.towerId !== undefined) { state = 'built'; pct = 100; }

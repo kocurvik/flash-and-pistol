@@ -121,7 +121,8 @@ export class BotBrain {
       (e.char === 'longman' && this.thinkLongman(ctx)) ||
       (e.char === 'builder' && this.thinkBuilder(ctx)) ||
       (e.char === 'doctor' && this.thinkDoctor(ctx)) ||
-      (e.char === 'spy' && this.thinkSpy(ctx));
+      (e.char === 'spy' && this.thinkSpy(ctx)) ||
+      (e.char === 'sniper' && this.thinkSniper(ctx));
     if (!handled) this.thinkShared(ctx);
   }
 
@@ -373,7 +374,7 @@ export class BotBrain {
     let T = this.spyTarget && this.spyTarget.alive ? this.spyTarget : null;
     if (!T) {
       const enemies = sim.entities.filter((o) => o.alive && o.team !== e.team && o.char !== 'spy');
-      const prio = { doctor: 0, builder: 1, longman: 2 };
+      const prio = { doctor: 0, builder: 1, sniper: 1, longman: 2 };
       enemies.sort((a, b) => (prio[a.char] - prio[b.char]) || (distXZ(e.pos, a.pos) - distXZ(e.pos, b.pos)));
       T = enemies[0] || null;
       this.spyTarget = T;
@@ -407,6 +408,28 @@ export class BotBrain {
     this.goal = d < 1.0 ? null : behind;
     const isBehind = sim.isBehind(e, T);
     this.wantAttack = d <= this.range() && (isBehind || e.slot === 2 || d < 1.3 || e.hearts < 3);
+    return true;
+  }
+
+  // Rifle for long shots (scoped, standing still), bow up close or when out of bullets.
+  thinkSniper(ctx) {
+    const { e } = this;
+    const def = CHARACTERS.sniper;
+    const T = ctx.ready.find((o) => dist3(e.pos, o.pos) <= WEAPONS.rifle.range * 0.5) || null;
+    if (!T) return false;
+    const d = dist3(e.pos, T.pos);
+    const rifle = e.hasPrimary && e.ammo > 0 && d > 9;
+    const want = rifle ? 1 : 2;
+    if (want !== e.slot) this.slot = want;
+    this.target = T;
+    if (rifle && e.weapon === def.primary) {
+      // Stand still and scope in before taking the shot
+      this.holdSpecial = this.useSpecials || d > 20;
+      this.wantAttack = !this.holdSpecial || e.scoped;
+      return true;
+    }
+    this.goal = d > WEAPONS.bow.range * 0.7 ? T.pos : null;
+    this.wantAttack = d <= WEAPONS.bow.range && Math.random() < this.diff.attackChance + 0.15;
     return true;
   }
 
@@ -484,15 +507,17 @@ export class BotBrain {
       facePitch = Math.hypot(t.x - e.pos.x, t.z - e.pos.z) < 1 ? -1.2 : this.ballisticPitch(eye, t);
     } else if (this.target) {
       let c = sim.chest(this.target);
-      if (e.weapon === 'nailgun') {
-        // Lead moving targets and aim above them to cancel the nail's drop
-        const bd = CHARACTERS.builder;
-        const t = Math.hypot(c.x - eye.x, c.z - eye.z) / bd.nailSpeed;
+      const shot = e.weapon === 'nailgun' ? { v: CHARACTERS.builder.nailSpeed, g: CHARACTERS.builder.nailGravity }
+        : e.weapon === 'bow' ? { v: CHARACTERS.sniper.arrowSpeed, g: CHARACTERS.sniper.arrowGravity } : null;
+      if (shot) {
+        // Lead moving targets and aim above them to cancel the projectile's drop
+        const t = Math.hypot(c.x - eye.x, c.z - eye.z) / shot.v;
         const v = this.target.vel || { x: 0, z: 0 };
-        c = { x: c.x + v.x * t, y: c.y - 0.5 * bd.nailGravity * t * t, z: c.z + v.z * t };
+        c = { x: c.x + v.x * t, y: c.y - 0.5 * shot.g * t * t, z: c.z + v.z * t };
       }
-      faceYaw = yawTo(c.x - eye.x, c.z - eye.z) + this.wobble;
-      facePitch = Math.atan2(c.y - eye.y, Math.hypot(c.x - eye.x, c.z - eye.z)) + this.wobble * 0.3;
+      const wob = this.wobble * (e.scoped ? 0.25 : 1);
+      faceYaw = yawTo(c.x - eye.x, c.z - eye.z) + wob;
+      facePitch = Math.atan2(c.y - eye.y, Math.hypot(c.x - eye.x, c.z - eye.z)) + wob * 0.3;
     } else if (this.lookYaw !== null) {
       faceYaw = this.lookYaw;
     }
@@ -514,7 +539,8 @@ export class BotBrain {
     // Doctor: double-jump over trouble now and then
     if (e.char === 'doctor' && !e.onGround && e.vel.y < 0 && this.target && this.target.team !== e.team && Math.random() < dt * 0.8) inp.jumpPressed = true;
 
-    const aligned = Math.abs(angleDiff(faceYaw, yaw)) < (e.weapon === 'nailgun' ? 4 : 25) * DEG;
+    const aimTol = e.weapon === 'rifle' ? 1.5 : e.weapon === 'nailgun' || e.weapon === 'bow' ? 4 : 25;
+    const aligned = Math.abs(angleDiff(faceYaw, yaw)) < aimTol * DEG && (!e.scoped || Math.abs(facePitch - pitch) < 0.03);
     inp.attack = this.wantAttack && aligned;
     inp.special = this.holdSpecial;
     if (this.pressSpecial && (aligned || e.char === 'longman')) { inp.specialPressed = true; this.pressSpecial = false; }
