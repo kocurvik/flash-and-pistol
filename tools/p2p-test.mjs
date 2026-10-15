@@ -104,6 +104,18 @@ try {
   await B.waitFor(visible('pick'), 'the client to see the pick screen');
   console.log('host started the match; client is on the pick screen');
 
+  // End the match: both stay connected and land back in the lobby
+  await A.evaluate(`(() => { const s = window.flashAndPistol.G.sim; s.score.yellow = 99; s.phase = 'roundEnd'; s.phaseT = 0; return true; })()`);
+  await B.waitFor(visible('matchend'), 'the client to see the match end');
+  await A.waitFor(visible('btn-matchend-lobby'), 'the host\'s back-to-lobby button');
+  await A.evaluate(`document.getElementById('btn-matchend-lobby').click(); true`);
+  await B.waitFor(`${visible('lobby')} && document.getElementById('lobby').textContent.includes('Hosty')`, 'the client to return to the lobby');
+  console.log('match ended; both players are back in the lobby');
+
+  await A.evaluate(`document.getElementById('btn-start').click(); true`);
+  await B.waitFor(visible('pick'), 'the client to see the pick screen again');
+  console.log('host started a second match without anyone rejoining');
+
   await A.evaluate(`document.getElementById('btn-leave').click(); true`);
   const msg = await B.waitFor(`window.alerts[0]`, 'the client to be told the host left', 30000);
   console.log('client notified:', msg);

@@ -28,6 +28,7 @@ ambient occlusion and is meant for strong graphics cards. On an Intel UHD laptop
 2. One person clicks **Host a game**. The lobby shows a game code such as `7KQ2MX` and a link.
 3. Everyone else types the code under *Play with friends* and clicks **Join**, or opens the link.
 4. Players pick a team in the lobby, and the host clicks **Start match**. Bots fill empty slots.
+5. When a match ends, everyone goes back to the lobby together. Nobody has to join again.
 
 The game runs in the host's browser, and the players' browsers connect to it directly over
 WebRTC ([PeerJS](https://peerjs.com), bundled in `vendor/`). Connecting needs internet for a
@@ -43,6 +44,7 @@ office or guest Wi-Fi) block direct connections between devices; use the local s
 3. The host clicks **Host a game**. The game appears under *Games on this network* for
    everyone else, who click **Join**.
 4. Players pick a team in the lobby, and the host clicks **Start match**. Bots fill empty slots.
+5. When a match ends, everyone goes back to the lobby together. Nobody has to join again.
 
 If friends can't connect, allow Node.js through the Windows firewall for *private networks*
 (Windows asks the first time). Also check that everyone is on the same Wi-Fi.

@@ -126,6 +126,7 @@ function initMenu() {
   $('btn-leave').onclick = () => backToMenu();
   $('btn-matchend-menu').onclick = () => backToMenu();
   $('btn-to-lobby').onclick = () => { if (G.mode === 'host') { G.sim.toLobby(); G.pauseOpen = false; } };
+  $('btn-matchend-lobby').onclick = () => { if (G.mode === 'host' && G.sim.phase === 'matchEnd') G.sim.toLobby(); };
   $('clickplay').onclick = () => { audio.init(); input.lock(); };
   canvas.addEventListener('click', () => {
     if (G.mode && PLAY_PHASES.includes(G.view.phase) && !input.locked && !G.pauseOpen) { audio.init(); input.lock(); }
@@ -293,7 +294,7 @@ async function joinWithCode() {
 }
 
 function startHosting(relay, m) {
-  const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty, mapId: settings.map });
+  const sim = new Sim({ teamSize: settings.teamSize, difficulty: settings.difficulty, mapId: settings.map, lobbyAfterMatch: true });
   sim.addHuman(m.you, playerName(), 'yellow');
   sim.fillBots();
   G.host = new HostSession(relay, sim);
@@ -994,7 +995,9 @@ function frame(now) {
     if (ph === 'matchEnd') {
       const w = G.view.matchWinner;
       $('matchend-title').innerHTML = w ? `<span class="${w === 'yellow' ? 'ty' : 'tt'}">${TEAM_NAMES[w]}</span> wins the match!` : 'Match over';
-      $('matchend-sub').textContent = `${G.view.score.yellow} – ${G.view.score.teal} · next match starts in ${Math.max(0, Math.ceil(G.view.phaseT))} s`;
+      const next = G.mode === 'offline' ? 'next match starts' : 'back to the lobby';
+      $('matchend-sub').textContent = `${G.view.score.yellow} – ${G.view.score.teal} · ${next} in ${Math.max(0, Math.ceil(G.view.phaseT))} s`;
+      $('btn-matchend-lobby').classList.toggle('hidden', G.mode !== 'host');
       const html = hud.scoreboardHtml(G.view, meNow);
       if ($('matchend-board').innerHTML !== html) $('matchend-board').innerHTML = html;
     }

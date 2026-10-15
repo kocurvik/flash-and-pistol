@@ -22,8 +22,9 @@ export function emptyInput(yaw = 0) {
 const r2 = (v) => Math.round(v * 100) / 100;
 
 export class Sim {
-  constructor({ teamSize = GAME.teamSize, difficulty = 'normal', mapId = 'arena' } = {}) {
+  constructor({ teamSize = GAME.teamSize, difficulty = 'normal', mapId = 'arena', lobbyAfterMatch = false } = {}) {
     this.teamSize = teamSize;
+    this.lobbyAfterMatch = lobbyAfterMatch; // online games return to the lobby instead of starting a new match
     this.difficulty = difficulty;
     this.entities = [];
     this.towers = [];
@@ -179,7 +180,10 @@ export class Sim {
 
   toLobby() {
     this.phase = 'lobby';
+    this.phaseT = 0;
     this.round = 0;
+    this.winner = null;
+    this.matchWinner = null;
     this.score = { yellow: 0, teal: 0 };
     this.towers = [];
     this.projectiles = [];
@@ -382,7 +386,10 @@ export class Sim {
         return;
       case 'matchEnd':
         this.phaseT -= dt;
-        if (this.phaseT <= 0) this.newMatch();
+        if (this.phaseT <= 0) {
+          if (this.lobbyAfterMatch) this.toLobby();
+          else this.newMatch();
+        }
         return;
     }
   }
